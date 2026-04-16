@@ -1,0 +1,33 @@
+{
+  "skill_name": "paper-analyzer",
+  "evals": [
+    {
+      "id": 1,
+      "name": "mht-tracking-paper",
+      "prompt": "请分析这篇关于多假设跟踪（MHT）的论文，提取其框架结构、算法逻辑，并生成PaddlePaddle代码实现。\n\n论文标题：Multiple Hypothesis Tracking for Multiple Target Tracking\n\n摘要：\nMultiple Hypothesis Tracking (MHT) is a well-established technique for tracking multiple targets in the presence of clutter and missed detections. Unlike conventional single-hypothesis trackers, MHT maintains multiple association hypotheses simultaneously, delaying hard decisions until more evidence becomes available. This paper presents a comprehensive framework for MHT, including hypothesis generation, pruning, and merging strategies. We derive the optimal pruning strategy based on hypothesis probabilities and show that MHT significantly outperforms JPDA and GNN in dense target scenarios.\n\n方法概述：\n1. Hypothesis Generation: For each new measurement, generate all possible association hypotheses considering track-to-measurement assignments, missed detections, and new tracks.\n\n2. Hypothesis Scoring: Each hypothesis H_k is assigned a probability P(H_k|Z_1:k) where Z_1:k denotes all measurements up to time k. The probability is computed using Bayesian updating:\nP(H_k|Z_1:k) ∝ P(Z_k|H_k) · P(H_k|Z_1:k-1)\n\n3. N-scan Pruning: Only retain hypotheses that differ in the last N scans (typically N=4-8). Older associations are fixed to the most probable hypothesis.\n\n4. Hypothesis Merging: Merge hypotheses that are sufficiently similar (similarity > 0.95) to reduce complexity.\n\n5. State Estimation: For each confirmed track, use Kalman Filter for state prediction and update.\n\n实验结果：\n- Dataset: Simulated dense traffic scenario with 20 targets\n- MHT achieves 95% track purity vs JPDA's 88% and GNN's 82%\n- ID switches: MHT=0.5, JPDA=2.3, GNN=4.1 per 100 frames\n- Processing time: MHT=45ms, JPDA=18ms, GNN=8ms per frame\n\n请按照您skill中定义的格式输出：<框架结构>、<算法逻辑>、<代码>",
+      "expected_output": "应该输出三个部分：1) 论文框架结构（包含摘要、方法、实验等章节）2) 详细的算法逻辑（包含MHT的5个步骤、公式推导、复杂度分析）3) 可运行的PaddlePaddle代码（包含Hypothesis类、MHTTracker类、KalmanFilter类）",
+      "files": []
+    },
+    {
+      "id": 2,
+      "name": "yolo-detection-paper",
+      "prompt": "我上传了一篇YOLOv7的论文，请帮我分析并生成代码。\n\n论文主要信息：\n- 标题：YOLOv7: Trainable bag-of-freebies sets new state-of-the-art for real-time object detectors\n- 发表：CVPR 2023\n- 核心：提出了一种高效的架构和一套训练技巧（bag-of-freebies）\n\n网络架构：\n1. Backbone: E-ELAN（Efficient ELAN）\n   - 使用extend、shuffle、merge cardinality结构\n   - 在不破坏梯度路径的情况下增强网络学习能力\n\n2. Neck: 带有辅助head的PA-NET（Path Aggregation Network）\n   - 辅助head用于深度监督\n   - 主head用于最终检测\n\n3. Head: 解耦头（Decoupled Head）\n   - 分类和回归分支独立\n   - 减少冲突，提升精度\n\n训练策略（Bag-of-Freebies）：\n1. Compound Scaling：动态调整网络宽度、深度和分辨率\n2. Convolutional Batch Normalization (CBN)\n3. Implicit Visual Knowledge (IVK)\n4. Mosaic Data Augmentation + MixUp\n5. label smoothing等\n\n实验结果（COCO数据集）：\n- YOLOv7-X5: 53.1% AP @ 190 FPS\n- 相比YOLOv5-X6: AP提升2.5%，速度提升20%\n\n请给出完整的框架分析、算法梳理和PaddlePaddle代码实现。",
+      "expected_output": "应该输出：1) 完整的论文框架结构（包含E-ELAN、PA-NET、Decoupled Head等模块）2) 详细的算法逻辑（网络架构、训练策略、loss计算）3) 可运行的PaddlePaddle代码（包含YOLOv7模型、数据增强、训练流程）",
+      "files": []
+    },
+    {
+      "id": 3,
+      "name": "arxiv-link-analysis",
+      "prompt": "请分析这篇arXiv论文：https://arxiv.org/abs/2208.03039\n\n这是关于PointNet++的论文，用于点云处理。请提取其框架结构、算法逻辑（hierarchical feature learning、set abstraction层等），并生成PaddlePaddle代码实现。特别关注如何在自动驾驶场景中应用（比如4D雷达点云处理）。",
+      "expected_output": "应该输出：1) PointNet++的论文框架（set abstraction、feature propagation等）2) 算法详细逻辑（层次化特征学习、采样+分组+MLP）3) 可用于点云处理的PaddlePaddle代码（SetAbstraction层、FeaturePropagation层、完整网络）",
+      "files": []
+    },
+    {
+      "id": 4,
+      "name": "markdown-format-paper",
+      "prompt": "我有一篇markdown格式的论文需要分析。\n\n```markdown\n# 基于注意力机制的多目标跟踪算法\n\n**作者**: 张三, 李四\n**单位**: 自动驾驶研究所\n**日期**: 2026年4月\n\n## 摘要\n\n本文提出了一种基于注意力机制的多目标跟踪算法，通过自注意力机制捕捉目标间的时空关联关系。实验表明，在KITTI数据集上，MOTA提升了3.5%。\n\n**关键词**: 多目标跟踪, 注意力机制, 深度学习\n\n## 1. 引言\n\n多目标跟踪（MOT）是自动驾驶的核心任务。现有方法存在以下局限：\n1. 数据关联依赖距离度量，忽略上下文信息\n2. 无法处理长时间遮挡\n3. ID交换频繁\n\n本文贡献：\n1. 提出时空注意力模块（STAM）\n2. 设计自适应关联策略\n3. 在KITTI和nuScenes上达到SOTA\n\n## 2. 方法\n\n### 2.1 时空注意力模块\n\n定义时空注意力权重：\n\n$$\n\\alpha_{ij} = \\frac{\\exp(e_{ij})}{\\sum_{k=1}^{N} \\exp(e_{ik})}\n$$\n\n其中 $e_{ij} = f_{\\theta}(f_i, f_j)$ 计算特征相似度。\n\n### 2.2 自适应关联策略\n\n使用Gumbel-Softmax实现可微关联：\n\n$$\nP_{ij} = \\frac{\\exp((g_{ij} - \\tau)^{-1})}{\\sum_{k} \\exp((g_{ik} - \\tau)^{-1})}\n$$\n\n### 2.3 网络架构\n\n| 模块 | 输入 | 输出 |\n|------|------|------|\n| 特征提取 | 图像+检测框 | 特征向量 |\n| STAM | 特征序列 | 注意力权重 |\n| 关联 | 注意力权重 | 关联矩阵 |\n| 更新 | 关联矩阵 | 轨迹状态 |\n\n## 3. 实验\n\n### 3.1 数据集\n- KITTI跟踪基准\n- nuScenes验证集\n\n### 3.2 结果对比\n\n| 方法 | MOTA ↑ | MOTP ↑ | IDS ↓ | FPS ↑ |\n|------|--------|--------|-------|------|\n| SORT | 62.3 | 71.2 | 452 | 260 |\n| DeepSORT | 64.1 | 72.5 | 321 | 45 |\n| 本文方法 | 67.6 | 74.3 | 198 | 52 |\n\n## 4. 结论\n\n本文提出了基于注意力机制的多目标跟踪算法，在保持实时性的同时显著提升了跟踪精度。未来工作将探索Transformer在关联中的应用。\n```\n\n请分析这篇markdown论文，提取框架结构、算法逻辑，并生成PaddlePaddle代码实现。",
+      "expected_output": "应该输出：1) 完整的论文框架结构（从markdown中提取章节、公式、表格）2) 详细的算法逻辑（STAM模块、Gumbel-Softmax关联、网络架构）3) 可运行的PaddlePaddle代码（包含注意力模块、关联策略、完整训练流程）",
+      "files": []
+    }
+  ]
+}
