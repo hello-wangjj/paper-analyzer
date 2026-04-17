@@ -26,9 +26,41 @@ description: 深度分析自动驾驶领域的学术论文（计算机视觉、�
 
 ### 1. PDF文件处理
 如果用户提供PDF文件：
-1. 使用PDF提取工具读取文本内容
-2. 保留章节结构、公式、图表说明
-3. 提取参考文献列表
+1. **使用mineru-open-api将PDF转换为Markdown格式**：
+
+   **快速模式**（推荐用于<10MB, <20页的简单论文）：
+   ```bash
+   mineru-open-api flash-extract <PDF文件路径> -o <输出目录>
+   ```
+   - 无需token，快速转换
+   - 限制：10MB/20页，无表格识别
+   - 适合：简单论文、快速预览
+
+   **精确模式**（推荐用于复杂论文、包含表格/公式）：
+   ```bash
+   mineru-open-api extract <PDF文件路径> -o <输出目录> -f md
+   ```
+   - 需要token（在 https://mineru.net/apiManage/token 创建）
+   - 支持表格识别、公式识别、OCR
+   - 适合：大型论文、复杂布局、学术文档
+
+   **arXiv论文直接下载**：
+   ```bash
+   mineru-open-api extract https://arxiv.org/pdf/<arXiv_ID>.pdf -o <输出目录>
+   ```
+
+2. **读取转换后的Markdown文件**，按Markdown格式论文处理流程（第3节）进行分析
+
+3. **保留转换文件**：转换后的markdown文件可用于后续参考，不删除
+
+**模式选择原则**：
+- 默认使用`flash-extract`（快速、免登录）
+- 遇到以下情况使用`extract`：
+  - 文件>10MB或>20页
+  - 需要表格识别
+  - 需要公式识别
+  - PDF为扫描件需要OCR
+  - 用户已有token配置
 
 ### 2. arXiv链接处理
 如果用户提供arXiv链接：
@@ -70,7 +102,7 @@ code block
 **重要**：分析结果必须直接写入论文同目录下的markdown文件，**不要在对话窗口流式输出内容**。
 
 ### 输出文件命名规则
-1. **如果分析PDF文件**：输出文件名为 `[论文标题]_分析_YYYYMMDD.md`
+1. **如果分析PDF文件**：先转换为markdown，输出文件名为 `[PDF文件名]_分析_YYYYMMDD.md`
 2. **如果分析markdown文件**：输出文件名为 `[原文件名]_分析_YYYYMMDD.md`
 3. **如果分析arXiv链接**：输出文件名为 `arXiv_[arXiv_ID]_分析_YYYYMMDD.md`
 4. **如果分析粘贴的文本**：输出文件名为 `论文分析_YYYYMMDD.md`
@@ -674,6 +706,7 @@ if __name__ == '__main__':
 6. **Windows兼容**：确保代码路径、多进程等在Windows 11上正常工作
 7. **文件编码**：输出markdown文件使用UTF-8编码
 8. **代码分离**：如果代码部分超过1000行，考虑将代码保存为单独的 `.py` 文件，在分析文件中引用
+9. **PDF处理**：必须先使用mineru-open-api将PDF转换为markdown，确保公式、图表、结构完整保留。默认使用flash-extract模式，复杂论文使用extract模式
 
 ## 大型论文处理
 
