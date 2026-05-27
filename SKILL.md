@@ -15,26 +15,32 @@ description: 深度分析自动驾驶领域学术论文的可执行 skill。适�
 
 ### 1.1 PDF 文件
 
-使用 `scripts/extract_pdf.py` 处理，或直接调用 mineru-open-api：
+使用 `scripts/extract_pdf.py` 处理，支持两种引擎（通过 `--engine` 选择）：
 
+**PaddleOCR（默认）**：调用 AI Studio API（PaddleOCR-VL-1.5），依赖 `requests`。
 ```bash
-# 快速模式（默认，<10MB <20页）
-mineru-open-api flash-extract <PDF路径> -o <输出目录>
-
-# 精确模式（复杂论文，需 token）
-mineru-open-api extract <PDF路径> -o <输出目录> -f md
-
-# arXiv 直接下载
-mineru-open-api extract https://arxiv.org/pdf/<ID>.pdf -o <输出目录>
+# 本地 PDF
+python scripts/extract_pdf.py <PDF路径>
+# arXiv
+python scripts/extract_pdf.py --arxiv https://arxiv.org/abs/<ID>
+# HTTP 链接
+python scripts/extract_pdf.py <https://...pdf>
 ```
 
-**模式选择**：默认 flash-extract；文件 >10MB 或 >20页 或需表格/公式识别时用 extract。
+**mineru（备选）**：调用 mineru-open-api CLI，需预装 mineru-open-api。
+```bash
+python scripts/extract_pdf.py <PDF路径> --engine mineru
+```
+
+**统一接口**：`extract_from_pdf(path, engine="paddleocr")` 和 `extract_from_arxiv(url, engine="paddleocr")`。`engine` 参数可选 `"paddleocr"` 或 `"mineru"`。
+
+**PaddleOCR 工作流程**：提交任务 → 轮询等待 → 下载结果（每页 Markdown + 图片存入 `ocr_output/` 子目录）→ 合并为单文件放到 **PDF 同目录**。必须通过环境变量 `PADDLEOCR_TOKEN` 配置 API Token，未设置时会报错提示。
 
 ### 1.2 arXiv 链接
 
 1. 识别 arXiv ID
-2. 下载 PDF 或获取摘要
-3. 按 PDF 流程处理
+2. 调用 `extract_from_arxiv()`，API 直接拉取 PDF 并解析
+3. 无需本地下载 PDF
 
 ### 1.3 Markdown 文件
 
