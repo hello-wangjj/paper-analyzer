@@ -400,7 +400,7 @@ def main():
         print("  mineru:           mineru-open-api CLI，需预先安装")
         print("")
         print("环境变量：")
-        print("  PADDLEOCR_TOKEN: PaddleOCR API Token（默认内置）")
+        print("  PADDLEOCR_TOKEN: PaddleOCR API Token（必须通过环境变量配置）")
         sys.exit(1)
 
     args = sys.argv[1:]
