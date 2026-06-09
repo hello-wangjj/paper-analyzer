@@ -1,13 +1,15 @@
 ---
 name: doc-to-podcast
-description: 将技术文档或学习笔记转化为双人对话播客脚本（Markdown）+ 音频（MP3）。当用户要求"转成播客""做成音频""生成播客""podcast""朗读版""对话形式讲解""把文档变成对话"时触发此技能。也适用于用户想把任何 Markdown 文档变成可听的双人讲解音频的场景，包括学习笔记、技术文档、论文解读、教程等。即使用户只是说"把这个转成对话形式"，也应触发此技能。
+description: 将技术文档或学习笔记转化为双人对话播客脚本（Markdown）+ 音频（MP3/WAV）。当用户要求"转成播客""做成音频""生成播客""podcast""朗读版""对话形式讲解""把文档变成对话"时触发此技能。也适用于用户想把任何 Markdown 文档变成可听的双人讲解音频的场景，包括学习笔记、技术文档、论文解读、教程等。即使用户只是说"把这个转成对话形式"，也应触发此技能。
 ---
 
 # Doc to Podcast — 文档转双人对话播客
 
-将任意技术文档/学习笔记转化为**双人对话播客**，输出播客脚本（Markdown）和音频文件（MP3）。
+将任意技术文档/学习笔记转化为**双人对话播客**，输出播客脚本（Markdown）和音频文件（MP3 或 WAV）。
 
-整个流程分两步：先生成播客脚本，再调用 edge-tts 生成音频。两步之间可以由用户审阅修改脚本。
+整个流程分两步：先生成播客脚本，再调用 TTS 引擎生成音频。两步之间可以由用户审阅修改脚本。
+
+支持两种 TTS 后端：**Edge TTS**（免费，MP3）和 **MiMo TTS**（自然有感情，WAV）。
 
 ---
 
@@ -112,6 +114,7 @@ description: 将技术文档或学习笔记转化为双人对话播客脚本（M
 4. 不要在对话中嵌套代码块、表格、公式——它们不会被朗读
 5. 公式要转化为**口语化的文字描述**（例：`Δθ ≈ 2/Nrx` → "角度分辨率大约等于 2 除以天线数"）
 6. 代码片段要转化为**文字讲解**（例：`np.fft.fft(x)` → "对 x 做快速傅里叶变换"）
+7. 自测题由角色直接说出（如"第一题是……"），不要单独用"第 N 题"作为角色名
 
 ### 脚本质量要求
 
@@ -148,54 +151,76 @@ description: 将技术文档或学习笔记转化为双人对话播客脚本（M
 
 播客脚本写好后，询问用户是否要直接生成音频。
 
-### 前置条件
+### 两种 TTS 后端
 
-- 需要 `edge-tts` 库（`uv add edge-tts` 或 `pip install edge-tts`）
-- 脚本在 `scripts/generate_audio.py`
+| 对比 | Edge TTS | MiMo TTS |
+|------|----------|----------|
+| 音质 | 清晰，偏机械 | 自然有感情，支持风格控制 |
+| 费用 | 免费 | 限时免费 |
+| 输出格式 | MP3 | WAV（无损） |
+| 认证 | 无需 key | 需 `MIMO_API_KEY` 环境变量 |
+| 默认男声 | zh-CN-YunjianNeural | 白桦（深沉磁性） |
+| 默认女声 | zh-CN-XiaoxiaoNeural | 冰糖（清亮甜美） |
+| 音频标签 | 不支持 | 支持（兴奋、疑惑、恍然大悟等） |
 
 ### 运行命令
 
+脚本在 `scripts/generate_audio.py`，通过 `--backend` 参数选择后端：
+
 ```bash
+# Edge TTS（默认，免费无需 key）
 uv run python <skill-path>/scripts/generate_audio.py <播客脚本.md> <输出.mp3>
+
+# MiMo TTS（自然有感情，需要 API key）
+$env:MIMO_API_KEY="your-key"   # PowerShell
+export MIMO_API_KEY="your-key" # Bash
+uv run python <skill-path>/scripts/generate_audio.py <播客脚本.md> <输出.wav> --backend mimo
 ```
 
 可选参数：
+- `--backend edge|mimo`：选择 TTS 后端（默认 edge）
 - `--male-voice` / `--female-voice`：自定义 TTS 声音
 - `--male-name` / `--female-name`：指定脚本中男女角色名字
+- `--no-tags`：禁用自动音频标签（MiMo only）
 
-### 中文默认声音
+### Edge TTS 可用声音
 
 | 性别 | 声音名 | 特点 |
 |------|--------|------|
 | 男 | zh-CN-YunjianNeural | 稳重，适合讲解 |
+| 男 | zh-CN-YunxiNeural | 自然 |
 | 女 | zh-CN-XiaoxiaoNeural | 自然，适合问答 |
+| 女 | zh-CN-XiaoyiNeural | 活泼 |
 
-### 可用声音查询
+### MiMo TTS 预置声音
 
-```bash
-uv run python -c "
-import asyncio, edge_tts
-async def main():
-    voices = await edge_tts.list_voices()
-    zh = [v for v in voices if v['Locale'].startswith('zh-CN')]
-    for v in zh:
-        print(f\"{v['ShortName']:30s} {v['Gender']}\")
-asyncio.run(main())
-"
-```
+| 性别 | 声音名 | 特点 |
+|------|--------|------|
+| 男 | 白桦 | 深沉磁性，适合讲解 |
+| 男 | 苏打 | 沉稳干练 |
+| 女 | 冰糖 | 清亮甜美，适合提问 |
+| 女 | 茉莉 | 温柔知性 |
+
+### MiMo 风格控制
+
+MiMo 后端会自动为每段对话添加风格：
+- **自然语言控制**：通过 user 消息设定角色性格（讲解者沉稳/提问者活泼）
+- **音频标签**：自动根据文本内容添加情绪标签，如 `(兴奋)` `(疑惑)` `(恍然大悟)` `(轻笑)`
+
+用户可以传 `--no-tags` 禁用自动标签。
 
 ### 生成过程
 
 1. 脚本自动解析 Markdown 中的 `**名字**：对话` 格式
 2. 根据角色名字自动分配男声/女声
 3. 逐段串行生成（带重试），避免服务器限流
-4. 拼接所有片段为最终 MP3
-5. 194 个片段大约需要 5-8 分钟
+4. 拼接所有片段为最终音频
+5. 150+ 个片段大约需要 5-10 分钟
 
 ### 输出
 
-- MP3 文件，大小约为每分钟 0.3-0.5 MB
-- 30 分钟播客约 7-15 MB
+- Edge TTS: MP3 文件，约每分钟 0.3-0.5 MB
+- MiMo TTS: WAV 文件，约每分钟 3-5 MB（无损）
 
 ---
 
@@ -215,9 +240,9 @@ asyncio.run(main())
       │
       ▼
   ④ 用户确认/修改后，询问是否生成音频
-      │
+      │   → 询问使用哪种后端（推荐 MiMo 如果有 key）
       ▼
-  ⑤ 调用 generate_audio.py 生成 MP3
+  ⑤ 调用 generate_audio.py 生成音频
       │
       ▼
   ⑥ 告知用户输出文件位置和大小
