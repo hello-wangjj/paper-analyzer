@@ -119,15 +119,15 @@ def is_female_speaker(speaker: str, male_name: str, female_name: str) -> bool:
 # MiMo 风格控制（仅 MiMo 后端使用）
 # ══════════════════════════════════════════════════════════
 
-MIMO_MALE_STYLE = (
-    "你是一位技术扎实的男性工程师，正在和朋友讲解雷达技术。"
+MIMO_MALE_STYLE_TEMPLATE = (
+    "你是一位技术扎实的男性工程师，正在和朋友讲解{topic}。"
     "语速适中偏慢，声音沉稳有力，讲解清晰有条理，善用类比。"
     "偶尔带着自信和热情，像在分享自己热爱的知识。"
     "自然对话，不要像念稿子。"
 )
 
-MIMO_FEMALE_STYLE = (
-    "你是一位活泼好学的女性新人，正在向工程师朋友请教雷达技术。"
+MIMO_FEMALE_STYLE_TEMPLATE = (
+    "你是一位活泼好学的女性新人，正在向工程师朋友请教{topic}。"
     "语速稍快，声音清亮有活力，充满好奇心。"
     "提问时带着思考，理解时表达惊喜和恍然大悟。"
     "自然亲切，像在和朋友聊天，偶尔用'嗯''哦''对'等语气词。"
@@ -135,9 +135,11 @@ MIMO_FEMALE_STYLE = (
 
 TAG_PATTERNS = [
     (r"[！!]{2,}|太.{0,4}了|好棒|好嘞|完美|满分", "(兴奋)"),
-    (r"等等|等等我|我有个疑问|能再说一遍吗", "(疑惑)"),
-    (r"哦！|原来如此|恍然大悟|明白了|完全正确|精辟", "(恍然大悟)"),
+    (r"等等|等等我|我有个疑问|能再说一遍吗|等一下", "(疑惑)"),
+    (r"哦！|原来如此|恍然大悟|明白了|完全正确|精辟|对！", "(恍然大悟)"),
     (r"哈哈|笑", "(轻笑)"),
+    (r"这就有意思了|有意思|有趣", "(若有所思)"),
+    (r"不对|等等，这不是|这里面有问题", "(质疑)"),
 ]
 
 
@@ -265,7 +267,7 @@ class EdgeTTSEngine(TTSEngine):
 class MimoTTSEngine(TTSEngine):
     """MiMo V2.5 TTS 后端（自然有感情，WAV 输出）。需要 MIMO_API_KEY。"""
 
-    def __init__(self):
+    def __init__(self, topic: str = "技术知识"):
         api_key = os.environ.get("MIMO_API_KEY", "").strip()
         if not api_key:
             print("错误: MIMO_API_KEY 环境变量未设置！")
@@ -278,6 +280,8 @@ class MimoTTSEngine(TTSEngine):
         except ImportError:
             print("错误: openai 未安装。请运行: uv add openai")
             sys.exit(1)
+        self._male_style = MIMO_MALE_STYLE_TEMPLATE.format(topic=topic)
+        self._female_style = MIMO_FEMALE_STYLE_TEMPLATE.format(topic=topic)
 
     @property
     def name(self) -> str:
@@ -301,9 +305,9 @@ class MimoTTSEngine(TTSEngine):
 
         # 选择风格指令
         if is_female_speaker(speaker, male_name, female_name):
-            style = MIMO_FEMALE_STYLE
+            style = self._female_style
         else:
-            style = MIMO_MALE_STYLE
+            style = self._male_style
 
         # 添加音频标签
         tagged_text = add_audio_tags(text) if use_tags else text
@@ -389,6 +393,7 @@ def main():
     parser.add_argument("--male-name", default=None, help="脚本中男性角色名字")
     parser.add_argument("--female-name", default=None, help="脚本中女性角色名字")
     parser.add_argument("--no-tags", action="store_true", help="禁用自动音频标签（MiMo only）")
+    parser.add_argument("--topic", default="技术知识", help="文档主题，用于调整 MiMo 风格 prompt（默认: 技术知识）")
 
     args = parser.parse_args()
 
@@ -400,7 +405,7 @@ def main():
     if args.backend == "edge":
         engine = EdgeTTSEngine()
     else:
-        engine = MimoTTSEngine()
+        engine = MimoTTSEngine(topic=args.topic)
 
     # 应用默认音色
     male_voice = args.male_voice or engine.default_male_voice
@@ -440,7 +445,8 @@ def main():
                 else tmp_dir / f"seg_{i:04d}_{item['speaker']}.wav"
 
         count = success + fail + 1
-        print(f"  [{count}/{total}] {item['speaker']}: {item['text'][:50]}...")
+        pct = count / total * 100
+        print(f"  [{count}/{total} {pct:.0f}%] {item['speaker']}: {item['text'][:50]}...")
 
         ok = engine.generate_segment(
             item["text"], voice, str(fname),
