@@ -84,7 +84,7 @@
 1. **提取**：从封面表「拟申报专利名称」或第一章名称取完整发明名称；去掉占位（如 `[待填写]`、`【待填写】`）、首尾空格。
 2. **规范化**：删除或替换 Windows 非法字符 `\ / : * ? " < > |` 与换行；连续空格可压为单个空格或删去（中文标题通常无空格亦可）。
 3. **长度**：文件名（不含扩展名）建议 **≤ 80 个字符**；超长则**截断**到约 80 字并保留语义完整（例如截在「方法及系统」等结尾词之前），勿用无意义随机串。
-4. **定稿命令**：`mermaid_render.py` 的 `-o` / `--docx` 须使用**同一主文件名**，且该主名**必须符合第 5 点**（**案件名 + `_` + 14 位时间戳**）。示例（案件名已按上文规范化、过长已截断时）：
+4. **定稿命令**：`mermaid_render.py` 的 `-o` / `--docx` 须使用**同一主文件名**，且该主名**必须符合第 5 点**（**案件名 + `_` + 14 位时间戳**）。**公式无需单独渲染**——`md_to_docx.py` 内置 LaTeX → OMML 转换器（依赖 `latex2mathml`），公式直接转为 Word 原生公式（可编辑、矢量清晰），不再生成 PNG 图片。示例（案件名已按上文规范化、过长已截断时）：
 
    `python3 tools/mermaid_render.py -i "…草稿.md" -o "一种异构计算环境下基于资源画像与限频重排队的批任务调度方法及系统_20260408143025.md"`
 
@@ -159,7 +159,9 @@ docx 模板允许并鼓励对**不便公开的部分做模糊化处理**（用�
 
 `python3 tools/mermaid_render.py -i <含图示的草稿.md> -o "<案件名_YYYYMMDDHHmmss>.md"`（默认在同目录生成**同名** `.docx`；可用 `--docx` 指定路径，`--no-docx` 跳过 Word。Word 失败时见终端提示的手动命令。）
 
-（mermaid 依赖 Node/mmdc、`pip install -r requirements.txt` 见 `tools/README.md`。）
+   **公式处理**：`md_to_docx.py` 自动将 LaTeX 公式转为 Word 原生 OMML 公式（依赖 `latex2mathml`），无需预先渲染 PNG。Mermaid 图仍由 `mermaid_render.py` 渲染为 PNG 嵌入。
+
+（mermaid 依赖 Node/mmdc；`latex2mathml` 已在 `pyproject.toml` 中声明。）
 
 ## 7.6 交付回复：权利要求偏向点（建议交互，必做）
 

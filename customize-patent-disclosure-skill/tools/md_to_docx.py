@@ -50,8 +50,15 @@ _INLINE_MATH_WITH_HIDDEN_IMG_RE = re.compile(
     r"<!--\s*!\[([^\]]*)\]\(([^)]+)\)\s*-->"
 )
 _INLINE_MATH_PAREN_WITH_HIDDEN_IMG_RE = re.compile(
-    r"\\\(((?:\\.|[^)])+?)\\\)\s*"
+    r"\\\(((?:[^\\]|\\.)*?)\\\)\s*"
     r"<!--\s*!\[([^\]]*)\]\(([^)]+)\)\s*-->"
+)
+# Bare inline math (no hidden image comment): $...$ and \(...\)
+_BARE_INLINE_MATH_DOLLAR_RE = re.compile(
+    r"(?<!\$)\$(?!\$)((?:\\.|[^$\n])+?)\$(?!\$)(?!\s*<!--)"
+)
+_BARE_INLINE_MATH_PAREN_RE = re.compile(
+    r"\\\(((?:[^\\]|\\.)*?)\\\)(?!\s*<!--)"
 )
 
 
@@ -167,6 +174,39 @@ def _formula_image_kind(alt: str, src: str) -> str | None:
     return "block"
 
 
+def _strip_math_delimiters(latex: str) -> str:
+    """Remove \\[…\\], $$…$$, $…$, \\(…\\) wrappers from a LaTeX string."""
+    s = latex.strip()
+    if s.startswith("\\[") and s.endswith("\\]"):
+        return s[2:-2].strip()
+    if s.startswith("$$") and s.endswith("$$"):
+        return s[2:-2].strip()
+    if s.startswith("\\(") and s.endswith("\\)"):
+        return s[2:-2].strip()
+    if s.startswith("$") and s.endswith("$") and not s.startswith("$$"):
+        return s[1:-1].strip()
+    return s
+
+
+def _insert_omml(paragraph, latex: str, *, display: bool = True) -> bool:
+    """Try to insert a LaTeX formula as a native Word equation (OMML).
+
+    Returns True on success, False if conversion fails.
+    """
+    try:
+        from latex_to_omml import insert_latex_equation
+    except ImportError:
+        return False
+    core = _strip_math_delimiters(latex)
+    if not core:
+        return False
+    try:
+        insert_latex_equation(paragraph, core, display=display)
+        return True
+    except Exception:
+        return False
+
+
 def _is_diagram_image(alt: str, src: str) -> bool:
     """mermaid 系统框图 / 流程图等（非公式，用全幅插图尺寸）。"""
     a = alt or ""
@@ -241,9 +281,18 @@ def _embed_from_image_ref(
 
 
 def _maybe_render_math_md(md_text: str, base_dir: Path) -> str:
-    """若含 LaTeX 公式则尝试调用 ``math_render``（已注释的 PNG 引用会跳过）。"""
+    """若含 LaTeX 公式则尝试调用 ``math_render``（已注释的 PNG 引用会跳过）。
+
+    当 latex2mathml 可用时跳过——OMML 原生公式已由各处理函数直接转换。
+    """
     if not re.search(r"\$\$|\\\[|\\\(|(?<!\$)\$(?!\$)", md_text):
         return md_text
+    # latex2mathml 可用 → OMML 原生公式，无需 PNG fallback
+    try:
+        import latex2mathml  # noqa: F401
+        return md_text
+    except ImportError:
+        pass
     try:
         from math_render import render_markdown_math
     except ImportError:
@@ -353,6 +402,19 @@ def _add_rich_content_to_paragraph(
         tokens.append((m.start(), m.end(), "math_img", (m.group(2), m.group(3).strip())))
         taken.append((m.start(), m.end()))
 
+    # Bare inline math (OMML native, no image needed)
+    for m in _BARE_INLINE_MATH_DOLLAR_RE.finditer(text):
+        if _span_overlaps(taken, m.start(), m.end()):
+            continue
+        tokens.append((m.start(), m.end(), "bare_math", (m.group(1),)))
+        taken.append((m.start(), m.end()))
+
+    for m in _BARE_INLINE_MATH_PAREN_RE.finditer(text):
+        if _span_overlaps(taken, m.start(), m.end()):
+            continue
+        tokens.append((m.start(), m.end(), "bare_math", (m.group(1),)))
+        taken.append((m.start(), m.end()))
+
     for m in _HIDDEN_MD_IMAGE_COMMENT_RE.finditer(text):
         if _span_overlaps(taken, m.start(), m.end()):
             continue
@@ -386,16 +448,35 @@ def _add_rich_content_to_paragraph(
                 run = paragraph.add_run(token[1:-1])
                 _set_run_font(run, "Consolas", 9)
                 run.font.color.rgb = RGBColor(0x33, 0x33, 0x33)
+        elif kind == "bare_math":
+            # Bare LaTeX inline math → try OMML first
+            if not _insert_omml(paragraph, payload[0], display=False):
+                _add_inline_to_paragraph(paragraph, f"${payload[0]}$", mono=mono)
         else:
             alt, src = payload[0], payload[1]
-            _embed_from_image_ref(
-                alt,
-                src,
-                base_dir,
-                paragraph=paragraph,
-                image_max_w_in=image_max_w_in,
-                image_max_h_in=image_max_h_in,
-            )
+            # Try OMML first for inline math images
+            omml_done = False
+            if kind == "math_img" and _formula_image_kind(alt, src) == "inline":
+                # Extract LaTeX from the inline math regex match
+                # The text between $...$ or \(...\) is the LaTeX source
+                # We need to find it from the original text at this position
+                span_text = text[start:end]
+                latex_match = (
+                    _INLINE_MATH_WITH_HIDDEN_IMG_RE.match(span_text)
+                    or _INLINE_MATH_PAREN_WITH_HIDDEN_IMG_RE.match(span_text)
+                )
+                if latex_match:
+                    latex_src = latex_match.group(1)
+                    omml_done = _insert_omml(paragraph, latex_src, display=False)
+            if not omml_done:
+                _embed_from_image_ref(
+                    alt,
+                    src,
+                    base_dir,
+                    paragraph=paragraph,
+                    image_max_w_in=image_max_w_in,
+                    image_max_h_in=image_max_h_in,
+                )
         pos = end
     if pos < len(text):
         _add_inline_to_paragraph(paragraph, text[pos:], mono=mono)
@@ -459,6 +540,8 @@ def _add_body_paragraph(
         or _HIDDEN_MD_IMAGE_COMMENT_RE.search(text)
         or _INLINE_MATH_WITH_HIDDEN_IMG_RE.search(text)
         or _INLINE_MATH_PAREN_WITH_HIDDEN_IMG_RE.search(text)
+        or _BARE_INLINE_MATH_DOLLAR_RE.search(text)
+        or _BARE_INLINE_MATH_PAREN_RE.search(text)
     ):
         _add_rich_content_to_paragraph(
             p,
@@ -505,6 +588,8 @@ def _add_list_item(
         or _HIDDEN_MD_IMAGE_COMMENT_RE.search(text)
         or _INLINE_MATH_WITH_HIDDEN_IMG_RE.search(text)
         or _INLINE_MATH_PAREN_WITH_HIDDEN_IMG_RE.search(text)
+        or _BARE_INLINE_MATH_DOLLAR_RE.search(text)
+        or _BARE_INLINE_MATH_PAREN_RE.search(text)
     ):
         _add_rich_content_to_paragraph(
             p,
@@ -670,6 +755,8 @@ def _line_has_embeddable_images(line: str) -> bool:
         or _HIDDEN_MD_IMAGE_COMMENT_RE.search(line)
         or _INLINE_MATH_WITH_HIDDEN_IMG_RE.search(line)
         or _INLINE_MATH_PAREN_WITH_HIDDEN_IMG_RE.search(line)
+        or _BARE_INLINE_MATH_DOLLAR_RE.search(line)
+        or _BARE_INLINE_MATH_PAREN_RE.search(line)
     )
 
 
@@ -777,6 +864,10 @@ def convert_md_to_docx(
                 i += 1
             if i < len(lines):
                 i += 1
+            latex_src = "\n".join(math_lines)
+            # OMML 原生公式优先
+            if _insert_omml(doc.add_paragraph(), latex_src, display=True):
+                continue
             hidden: tuple[str, str] | None = None
             if i < len(lines):
                 cm = _HIDDEN_MD_IMAGE_COMMENT_RE.match(lines[i].strip())
@@ -808,6 +899,10 @@ def convert_md_to_docx(
                 i += 1
             if i < len(lines):
                 i += 1
+            latex_src = "\n".join(math_lines)
+            # OMML 原生公式优先
+            if _insert_omml(doc.add_paragraph(), latex_src, display=True):
+                continue
             hidden: tuple[str, str] | None = None
             if i < len(lines):
                 cm = _HIDDEN_MD_IMAGE_COMMENT_RE.match(lines[i].strip())
@@ -832,13 +927,18 @@ def convert_md_to_docx(
         # 独立 HTML 注释行（公式图 / mermaid 框图引用）
         if _HIDDEN_MD_IMAGE_COMMENT_RE.fullmatch(line.strip()):
             flush_paragraph()
-            _try_embed_hidden_comment_line(
-                doc,
-                line,
-                base_dir,
-                image_max_w_in=image_max_w_in,
-                image_max_h_in=image_max_h_in,
-            )
+            cm = _HIDDEN_MD_IMAGE_COMMENT_RE.match(line.strip())
+            if cm:
+                alt, src = cm.group(1), cm.group(2).strip()
+                # 跳过 math_figures 引用（OMML 原生公式已处理）
+                if "math_figures" not in src.replace("\\", "/"):
+                    _try_embed_hidden_comment_line(
+                        doc,
+                        line,
+                        base_dir,
+                        image_max_w_in=image_max_w_in,
+                        image_max_h_in=image_max_h_in,
+                    )
             i += 1
             continue
 

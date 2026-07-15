@@ -161,6 +161,7 @@ flowchart TB
 
 - 使用 **fenced mermaid**；**不要** ASCII 文字/箭头流程图
 - 定稿交付前用 `tools/mermaid_render.py` 转 PNG 并**默认**生成 Word；失败时按终端提示用 `md_to_docx.py` 手动转换
+- **公式无需渲染为图片**：`md_to_docx.py` 内置 LaTeX → OMML 转换器，公式自动转为 Word 原生公式（可编辑、矢量清晰）
 
 ##### 流程说明
 

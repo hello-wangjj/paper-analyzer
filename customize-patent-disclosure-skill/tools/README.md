@@ -103,17 +103,15 @@ Windows 上若仅装 Node 未执行 `npm install`，脚本会通过 `npx -y @mer
 
 ---
 
-## math_render.py — LaTeX 公式 → PNG
+## math_render.py — LaTeX 公式 → PNG（已由 OMML 替代，仅作降级备选）
+
+> **自 v2.1 起，`md_to_docx.py` 内置 LaTeX → OMML 转换器**（依赖 `latex2mathml`），公式直接转为 Word 原生公式（可编辑、矢量清晰），不再需要预先渲染 PNG。以下 `math_render.py` 仅在 `latex2mathml` 不可用时作为降级方案。
 
 将 Markdown 中的 **LaTeX 公式**（``$...$`` / ``\\(...\\)`` 行内；``$$...$$`` / ``\\[...\\]`` 块级）用 **matplotlib mathtext** 渲染为 PNG；**保留 LaTeX 原文**，图片引用写入 HTML 注释 ``<!-- ![...](math_figures/...) -->``（Markdown 预览不显示图），供 **`md_to_docx.py`** 嵌入 Word。
 
-**Mermaid 框图**：``mermaid_render.py`` **保留** `` ```mermaid`` 源码，并追加 ``<!-- ![图示 n](mermaid_figures/...) -->``（预览隐藏图引用，Word 仍大图嵌入）。
-
-**mathtext 兼容**：渲染前自动将常见 LaTeX 简写映射为 mathtext 符号（如 ``\ge``→``\geq``、``\le``→``\leq``、``\land``→``\wedge``）；块级式内**换行压成一行**、``\tag{1}`` 转为式末 ``(1)``；仍无法解析的公式保留原文。
+**mathtext 兼容**：渲染前自动将常见 LaTeX 简写映射为 mathtext 符号（如 ``\ge``→``\geq``、``\le``→``\leq``、``\land``→``\wedge``）；块级式内**换行压成一行**、``\tag{1}`` 转为式末 ``(1)``；仍无法解析的公式保留原文。**注意**：``\begin{cases}`` 等复杂 LaTeX mathtext 不支持，会失败降级。
 
 **失败降级**：某一公式渲染失败时**不中断**——该处**保留原文**（``$...$`` 或 ``$$...$$``）；``md_to_docx`` 对未转换的 ``$$`` 块以 **Consolas 代码块**写入 Word。
-
-**Word 版式**：**全部公式图**（行内与块级式 (1) 等）在 Word 中统一按约 **0.17 英寸**高度嵌入；**mermaid 框图/流程图**仍按 **5.5×8.2 英寸**上限等比嵌入。块级 PNG 默认与行内同字号（10.5pt）渲染，避免块级式显得过粗过大。
 
 ### 依赖
 
@@ -132,9 +130,39 @@ python3 tools/math_render.py -i draft.md -o out.md --assets-dir math_figures
 
 ---
 
-## md_to_docx.py — Markdown → Word
+## latex_to_omml.py — LaTeX → Word 原生公式（OMML）
+
+将 LaTeX 数学公式转为 Word 原生 OMML（Office Math Markup Language）公式，嵌入 python-docx 段落。公式在 Word 中**可编辑、可缩放、矢量清晰**，无需 PNG 图片。
+
+**流程**：LaTeX → MathML（`latex2mathml`）→ OMML（lxml 递归转换）→ 嵌入 `CT_P` 段落
+
+**支持的 LaTeX 特性**：分数（`\frac`）、根号（`\sqrt`）、上下标（`_`/`^`）、希腊字母、`\mathrm`/`\text`、`\begin{cases}` 分段函数、`\min`/`\max` 函数、`\cdot`/`\land` 运算符等。**不支持**：矩阵（`\begin{matrix}`）、对齐环境（`\begin{aligned}`）等高级 LaTeX。
+
+**用法**（被 `md_to_docx.py` 自动调用，一般无需直接使用）：
+
+```python
+from latex_to_omml import insert_latex_equation, latex_to_omml
+from docx import Document
+
+doc = Document()
+p = doc.add_paragraph()
+insert_latex_equation(p, r"E = q \cdot s_{\mathrm{clu}} + (1 - q) \cdot s_{\mathrm{hist}}", display=True)
+doc.save("test.docx")
+```
+
+### 依赖
+
+```bash
+uv add latex2mathml   # 纯 Python，无编译依赖
+```
+
+---
+
+## md_to_docx.py — Markdown → Word（含 OMML 公式）
 
 将交底书 Markdown 转为 `.docx`，**`#`–`######` 映射为 Word 内置「标题 1」–「标题 9」**，正文为宋体 10.5pt，代码块为 Consolas，便于交给代理人或所内用 Word 修订。
+
+**公式处理（v2.1+）**：自动将 LaTeX 公式转为 **Word 原生 OMML 公式**（依赖 `latex2mathml`），公式可编辑、矢量清晰、自动适配字体大小。支持 `$...$`、`\(...\)` 行内公式和 `$$...$$`、`\[...\]` 块级公式，包括 `\begin{cases}` 等复杂 LaTeX。OMML 转换失败时降级为 `math_render.py` PNG 渲染（若可用），再失败则保留 LaTeX 原文。
 
 **图示**：定稿应用 **`mermaid_render.py`** 将 mermaid 转为 PNG；若个别块生图失败被降级保留围栏，本脚本会将**仍存在的** `` ```mermaid`` 块按**代码块**写入 Word。本脚本不调用 `mmdc`。
 
@@ -144,7 +172,7 @@ python3 tools/math_render.py -i draft.md -o out.md --assets-dir math_figures
 pip install -r requirements.txt
 ```
 
-依赖为 `python-docx`（见仓库根目录 `requirements.txt`）。
+依赖为 `python-docx` + `latex2mathml`（见仓库根目录 `pyproject.toml`）。
 
 ### 用法
 
