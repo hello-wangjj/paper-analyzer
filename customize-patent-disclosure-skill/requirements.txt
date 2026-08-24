@@ -1,9 +1,18 @@
-# 使用 tools/md_to_docx.py、docx_to_md.py、pptx_to_md.py、math_render.py 时安装
+# md_to_docx.py / docx_to_md.py / pptx_to_md.py / mermaid_render.py / formula_plan 校验共用
 python-docx>=1.1.0
-# 定稿图示（mermaid → PNG）须 Node：在 tools/ 执行 npm install 或 npx，见 tools/README.md
+# Word 可编辑公式（LaTeX -> MathML -> OMML）；失败时保留原文
+latex2mathml>=3.77.0
+# formula_plan / references/formulas/paradigms.yaml
+PyYAML>=6.0
+# mermaid -> PNG：Playwright + 内置 tools/vendor/mermaid.min.js（与国知局查新共用浏览器，见 tools/browser.py）
+playwright>=1.40.0
 mammoth>=1.6.0
 python-pptx>=0.6.21
-matplotlib>=3.8.0
 
-# 可选：Step 5 国知局 epub.cnipa.gov.cn 抓取（Playwright，体积较大；未写入本文件以免默认全量安装）
-#   pip install -r tools/requirements-cnipa.txt && python -m playwright install chromium
+# 可选：公式 PNG（仅 OMML 失败且用户确认后安装；约 100MB 含 numpy）
+#   pip install matplotlib
+#   python tools/md_to_docx.py -i a.md -o a.docx --math-render
+
+# 可选：国知局 epub.cnipa.gov.cn 查新前置探测（有系统 Chrome/Edge 即可，勿默认装浏览器）
+#   python tools/browser.py --probe
+#   仅当无系统浏览器且自带 Chromium 缺失时：python -m playwright install chromium

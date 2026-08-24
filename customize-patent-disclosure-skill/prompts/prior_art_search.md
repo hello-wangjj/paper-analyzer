@@ -10,37 +10,37 @@
 
 1. **站点**：[国家知识产权局 中国专利公布公告](http://epub.cnipa.gov.cn/)（**仅** `epub.cnipa.gov.cn`）。
 2. **工具**（本仓库 `tools/`）：**`cnipa_epub_search.py`** —— **一步**完成公布站检索与结果解析（Playwright 过站点 WAF）；结果页 HTML **仅在内存中处理，不落盘**。成功时终端含 **`EPUB_NOTE:`**（ASCII，如 `html_bytes=… disk=0`）与 **`EPUB_HITS_JSON:`** 一行（JSON 数组：标题、公开号、链接、**`abstract`** 等）。
-3. **国知局检索词（生成阶段必做，须在拼 Bash 之前完成）**
+3. **专利类型过滤（与 intake 一致）**：公布站首页支持勾选 **发明公布 / 发明授权 / 实用新型 / 外观设计**。脚本参数 **`--type invention|utility_model|design|all`**（默认 `all`）。本案为发明（默认）时查新应传 **`--type invention`**；实用新型传 `utility_model`。映射见 **`references/patent_type_search.yaml`** 与 **`tools/patent_type.py`**。
+4. **国知局检索词（生成阶段必做，须在拼 Bash 之前完成）**
 
    - **拆分责任在 Agent**：在**生成/构造命令阶段**，从本案技术方案、专利点或用户主题中归纳 **2～8 个与方案相关度高的检索单位**，**仅用 ASCII 空格分隔**，再写入 `cnipa_epub_search.py` 的参数。每一单位宜为 **有检索意义的语义块**，例如：**专业术语**、**名词短语**、**名动组合（如「批量调度」「异构调度」）**、**业内固定搭配**；**不要**拆成过碎的单字、泛义双字（如单独 `检索`、`增强`、`系统`、`方法` 等泛词），也**不要**把无关联词硬凑成一串。
    - **禁止**把**无空格的一整句长中文**当作**唯一**参数（例如不要：`".../cnipa_epub_search.py" "知识库检索增强大语言模型"`）。长串在公布站单框内易被当作整句 AND，**极易 0 条**。
-   - **Agent 执行时**：**每一轮 `Bash` 只传一个**检索单位（一个词块一句参数）；**2～8 个单位须对应 2～8 次**独立调用，**禁止**在一次工具调用里把多个词块同时作为多个 argv 传给 `cnipa_epub_search.py`（脚本虽支持多词单次进程内合并，**仅供本地/人工**；Agent 为控时、降单次 Playwright 链路与 IDE/终端超时风险，**必须**拆进程）。
-   - 示意（须按本案替换；**三次调用、每次一词**）：
+   - **Agent 执行时**：**一次进程传入全部检索单位**（多个 argv 或空格分隔均可）。脚本在**同一浏览器**内一词一查再按 `pub_number` 去重合并（冷启动更慢，故**禁止**为控时把 2～8 个词拆成 2～8 次独立 Playwright 进程）。若单次环境超时，再拆成至多两批，每批仍共用一个浏览器。
+   - 示意（须按本案替换；**一次调用、多个词**；类型按 intake）：
 
      ```bash
-     python3 …/cnipa_epub_search.py 知识库
-     python3 …/cnipa_epub_search.py 检索增强
-     python3 …/cnipa_epub_search.py 大语言模型
+     python ${CLAUDE_SKILL_DIR}/tools/cnipa_epub_search.py --type invention 知识库 检索增强 大语言模型
      ```
 
    - **脚本不做**自动分词或自动拆长中文；若确需**整句一次** AND 检索，改用 **`cnipa_epub_crawler.py`** 单传一句。
 
-4. **执行方式**（Step 5 在读完本文件后**先尝试**）：
+5. **执行方式**（Step 5 在读完本文件后**先探测，再检索**）：
 
    ```bash
-   pip install -r tools/requirements-cnipa.txt
-   python -m playwright install chromium
-   # Agent：对上一节每个检索单位各执行一次（示例仅展示首轮）
-   python3 ${CLAUDE_SKILL_DIR}/tools/cnipa_epub_search.py 词甲
+   python ${CLAUDE_SKILL_DIR}/tools/browser.py --probe
+   # --probe 的 stdout JSON：playwright=false 时本会话最多一次 pip install -r requirements.txt，再 --probe
+   # ok=true（系统 Chrome/Edge 或自带 Chromium）→ 直接检索，禁止 python -m playwright install chromium
+   # ok=false 且已有 playwright 包、本机无 Chrome/Edge 时，才允许一次 python -m playwright install chromium
+   python ${CLAUDE_SKILL_DIR}/tools/cnipa_epub_search.py --type invention 词甲 词乙 词丙
    ```
 
-   - **合并责任在 Agent**：每次调用解析 **stdout** 上**唯一一行** **`EPUB_HITS_JSON:`** 后的 JSON 数组；在推理中按 **`pub_number`** 为主键去重合并（无则 **`link`**，再否则可用标题前缀），得到**一份**总表后再写入查新笔记与 3.1/3.3。
-   - **`cnipa_epub_search.py`** 若人工单次传入多词，会按空白拆段、进程内**一段一查**并去重（**stderr** 可出现 **`EPUB_MERGE:`**）；与 Agent **分多次调用**策略无关。
-   - 成功时 **stdout 仅一行** **`EPUB_HITS_JSON:`** + JSON 数组（UTF-8，含中文 `abstract`）；**`EPUB_MERGE:`** / **`EPUB_NOTE:`** / **`EPUB_HINT:`** 等在 **stderr** 且为 **ASCII**（减轻 PowerShell 把中文 stderr 当成错误流）。解析命中时请以 **stdout 该行 JSON 为准**，勿因 stderr 或终端编码误判「未命中」而不必要地降级 WebSearch。Windows 乱码与 PowerShell 注意见 **`INSTALL.md`**（`chcp 65001` / `PYTHONUTF8=1`、勿滥用 `2>&1`）。
+   - **禁止**把 `pip install` / `python -m playwright install chromium` 写进每次检索的默认命令。
+   - **合并**：一次调用若 stderr 含 **`EPUB_MERGE:`**，以 **stdout** 上**唯一一行** **`EPUB_HITS_JSON:`** 为准（脚本已按 `pub_number` 去重）。仅当拆成多批调用时，Agent 再按 **`pub_number`**（无则 **`link`**）合并，得到一份总表后再写入查新笔记与 3.1/3.3。
+   - **stderr ≠ 失败**：**退出码 0** 且 stdout 有 `EPUB_HITS_JSON:` 即为成功。PowerShell 可能把 stderr 显示为 `NativeCommandError` 或中文乱码，**禁止**因此判定「未命中」或降级 WebSearch。**禁止** `2>&1` 后再在混合流里找 JSON。`EPUB_MERGE:` / `EPUB_NOTE:` / `EPUB_HINT:` / `BROWSER:` 等在 **stderr** 且多为 **ASCII 机读标记**；脚本已 UTF-8 输出，不必先 `chcp 65001`。
    - 将 JSON 中**可核验**的公开号、标题、**国知局站点内详情链接**写入查新笔记与 3.1/3.3（见下 **`abstract` 必用**）。
-   - **降级条件**（满足任一则进入 **B**）：命令非 0 退出、超时、无 Playwright、**`EPUB_HITS_JSON` 为空数组**、或条目经人工核对明显与主题无关。
+   - **降级条件**（满足任一则进入 **B**）：**退出码非 0**、超时、无 Playwright 且安装失败、stdout **无** `EPUB_HITS_JSON:`、**`EPUB_HITS_JSON` 为空数组**、或条目经人工核对明显与主题无关。**仅有 stderr / 乱码 / NativeCommandError 而退出码为 0 且 JSON 非空 → 不降级。**
 
-5. **`abstract` 字段（国知局条目，规定必用）**
+6. **`abstract` 字段（国知局条目，规定必用）**
 
    若 **`EPUB_HITS_JSON`** 中某项含非空的 **`abstract`**（解析自公布站结果页摘要），对**该条专利**须同时遵守：
 
@@ -49,17 +49,20 @@
    - **正文呈现**：交底书 3.1/3.3 中**不得**大段逐字粘贴官方摘要（避免抄袭与超字数）；应**消化后**用**自己的话**压缩为「方案概括 + 应用 + 缺点/局限」；查新笔记可保留稍长的摘录供自用核对，但须标注来源于公布站摘要。
    - **缺失时**：若某条 JSON **无** `abstract` 或为空（旧版页面 / 表格布局未解析到等），须在查新笔记中注明「该条无摘要字段」，并改用**详情页**或 **Google Patents** 等可核验来源补全理解后再写 3.1/3.3，**不得**留空理由含糊带过。
 
-6. **链接与著录**：国知局详情 URL 以脚本输出为准；**禁止编造**；若仅能从公布站得到公开号，可再配 **Google Patents** 稳定页 `https://patents.google.com/patent/CN…/en` 作为**补充**公开源（仍须打开校验）。
+6. **链接与著录**：`EPUB_HITS_JSON` 命中项在 3.1/3.3 的「来源链接」**直接使用 JSON 的 `link` 字段**（国知局公布站 `epub.cnipa.gov.cn`）；**禁止编造**，也**不得**用 Google Patents URL **替换**已有 `link`。Google Patents 仅用于 **§B** 降级检索所得条目，或 JSON **无** `link`、仅知 `pub_number` 时的备选取址（如 `https://patents.google.com/patent/CN…/en`，仍须打开校验）。
 
 ### B. Google 学术与 Google Patents（**降级 / 补充**）
 
-在 **A 不可用或结果不足**时启用，与历史约定一致：
+在 **A 不可用或结果不足**时启用。类型过滤能力见 **`references/patent_type_search.yaml`**：
 
 1. **中文文献与学术**：[Google 学术搜索](https://scholar.google.com)（`scholar.google.com`）。
    - 用**中文关键词**、技术方案核心术语、应用场景；可组合 2–3 组查询。
    - 强化「中国」语境时可加：`中国`、`site:.cn`、`专利`、`CN`（与专利号区分使用）等，以实际命中为准。
-   - 通过 **WebSearch** 或浏览器可用能力检索 Scholar；结果中优先选用**可打开、与标题/作者匹配**的条目链接。
-2. **中国专利公开文献（补充）**：[Google Patents](https://patents.google.com/) 检索中文标题、申请人或公开号（`CN…A` / `CN…B` 等），每条使用**稳定著录页 URL**。
+   - 通过 **WebSearch** 或浏览器检索；优先可打开且与标题/作者匹配的链接。
+2. **中国专利公开文献（补充）**：[Google Patents](https://patents.google.com/)。
+   - **发明**：界面/参数倾向 **Patent（`type=PATENT`）** + `country:CN`；公开号常见 `CN…A` / `CN…B`。
+   - **实用新型**：**无独立 Utility Model 类型**；用 Patent 域 + 关键词「实用新型」或公开号 `…U` 收窄，**类型过滤仍以国知局 A 渠道为准**。
+   - 每条使用**稳定著录页 URL**；查询串可参考 `tools/patent_type.py` 的 `google_patents_websearch_query`。
 3. **其它来源**：英文文献、非中国专利等可继续用 Google Patents、出版社页面、DOI、arXiv 等 + WebSearch。
 4. **关键词构造**：技术方案核心术语、应用场景与方法名称，可组合 2–3 组查询。
 
@@ -78,7 +81,8 @@
 | 类型 | 推荐 URL 形式 | 说明 |
 |------|----------------|------|
 | 美国等专利（公开出版物号） | `https://patents.google.com/patent/US20240118920A1/en` | 将 `US20240118920A1` 替换为实际公开号；以 Google Patents 页面能打开且标题/摘要匹配为准。 |
-| 中国专利 | **`https://patents.google.com/patent/CNXXXXXXXXXA/en`**（或对应 B 型等） | **优先**国知局公布站或 Google Patents 稳定著录页；勿依赖易过期的检索会话 URL。 |
+| 中国专利（**§A 国知局 JSON 命中**） | JSON 的 **`link`**，如 `http://epub.cnipa.gov.cn/patent/CN119781913A` | 3.1/3.3「来源链接」**照抄 `link`**，勿改域名为 `patents.google.com`。 |
+| 中国专利（**§B / WebSearch 补条**） | `https://patents.google.com/patent/CNXXXXXXXXXA/en`（或对应 B/U 型等） | 仅无国知局 `link`、经 §B 检索所得条目使用；勿用于替换 §A 命中项的 `link`。 |
 | 学术论文（含 Scholar） | Scholar 条目页、出版社官方页或 **`https://doi.org/10.xxxx/...`** | Scholar 链接若重定向或镜像，以最终可长期解析的 DOI/出版社页为准。 |
 | arXiv 预印本 | `https://arxiv.org/abs/2008.09213` | `abs` 页为规范条目页；勿用未经验证的镜像域名冒充官方。 |
 | 期刊 / 会议 | 出版社 DOI：`https://doi.org/10.xxxx/...` 或官方摘要页 | 以 DOI 解析后页面与文献一致为准。 |

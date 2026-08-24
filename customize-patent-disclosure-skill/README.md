@@ -2,11 +2,11 @@
 
 # 中国专利.skill
 
-> 从项目文档到**可交付的技术交底书**：专利点挖掘、**查新优先国知局公布公告站**、脱敏成文与自检闭环。
+> 从项目文档到**可交付的技术交底书**：专利点**资产清单与取舍门禁**、**查新优先国知局公布公告站**、脱敏成文、**公式范式校验**与自检闭环、**版本化目录交付**。
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python 3.9+](https://img.shields.io/badge/Python-3.9%2B-blue.svg)](https://www.python.org/)
-[![Node.js](https://img.shields.io/badge/Node.js-mermaid%2Fmmdc-339933.svg)](https://nodejs.org/)
+[![Playwright](https://img.shields.io/badge/Playwright-mermaid-2EAD33.svg)](https://playwright.dev/)
 [![AgentSkills](https://img.shields.io/badge/AgentSkills-Standard-green)](https://agentskills.io)
 
 <br>
@@ -37,21 +37,21 @@
 </thead>
 <tbody>
 <tr><td nowrap width="1%"><strong>项目扫描</strong></td><td>按优先级读文档 / 代码；<code>.docx</code> / <code>.pptx</code> 先转 Markdown 再扫（见 <code>prompts/project_scan.md</code>）</td></tr>
-<tr><td nowrap width="1%"><strong>专利点</strong></td><td>候选点讨论与融合（<code>patent_points_analyzer.md</code>）</td></tr>
-<tr><td nowrap width="1%"><strong>查新</strong></td><td><strong>优先</strong> <a href="http://epub.cnipa.gov.cn/">国知局 · 中国专利公布公告</a>（<code>tools/cnipa_epub_search.py</code>）；异常或无果时降级 WebSearch（Google 学术 / Patents）。著录与外链写入第一章（<code>prior_art_search.md</code>）</td></tr>
-<tr><td nowrap width="1%"><strong>交底书成稿</strong></td><td>脱敏模版 + <strong>mermaid</strong> 系统框图与流程图；<code>mermaid_render.py</code> → PNG，默认再出 <strong>.docx</strong></td></tr>
-<tr><td nowrap width="1%"><strong>交付命名</strong></td><td>凡落盘交付：<code>{案件名}_{YYYYMMDDHHmmss}.md</code> 与同名 <code>.docx</code>（<code>disclosure_builder.md</code> §7.3）</td></tr>
+<tr><td nowrap width="1%"><strong>专利点资产清单</strong></td><td>候选盘点 + <strong>轻量相似专利初筛</strong>（Google Patents / WebSearch）+ 评分 + 四类分类（建议申请 / 可合并 / 暂不适合 / 商业秘密），<strong>用户取舍确认后才成文</strong>（<code>patent_points_analyzer.md</code>）</td></tr>
+<tr><td nowrap width="1%"><strong>查新</strong></td><td><strong>优先</strong> <a href="http://epub.cnipa.gov.cn/">国知局 · 中国专利公布公告</a>（<code>tools/cnipa_epub_search.py --type invention|utility_model</code>，按专利类型过滤）；异常或无果时降级 WebSearch（Google 学术 / Patents）。著录与外链写入 3.1/3.3（<code>prior_art_search.md</code>）</td></tr>
+<tr><td nowrap width="1%"><strong>交底书成稿</strong></td><td>所内 docx 模版对齐 + <strong>mermaid</strong> 系统框图与流程图（<strong>Playwright 渲染，免 Node/mmdc</strong>）；公式经 <code>formula_plan.yaml</code> 范式计划 + <code>check_formula_plan.py</code> 可算性校验后，转 <strong>Word 原生 OMML 公式</strong>；成文遵循<strong>标题贯穿与领域术语</strong>规则（§7.9）</td></tr>
+<tr><td nowrap width="1%"><strong>交付命名</strong></td><td>凡落盘交付：<code>{案件名}_{YYYYMMDDHHmmss}.md</code> 与同名 <code>.docx</code>，写入 <code>vN-简短说明-时间戳/</code> <strong>版本目录</strong>并维护 <code>版本索引.md</code>（<code>disclosure_builder.md</code> §7.3、<code>versioned_output.md</code>）</td></tr>
 <tr><td nowrap width="1%"><strong>自检</strong></td><td>逻辑闭环、公式与参数一致（<code>disclosure_self_check.md</code>，不写入正文）</td></tr>
-<tr><td nowrap width="1%"><strong>迭代</strong></td><td><strong>合并</strong> / <strong>纠正</strong> 另存新文件；<code>交底书修订对话记录.md</code> 逐条追加（<code>iteration_context.md</code>、<code>iteration_dialog_log.py</code>）</td></tr>
+<tr><td nowrap width="1%"><strong>迭代</strong></td><td><strong>合并</strong> / <strong>纠正</strong>（含<strong>术语族替换</strong>）另存下一版本目录；<code>交底书修订对话记录.md</code> 逐条追加、<code>版本索引.md</code> 同步更新（<code>iteration_context.md</code>、<code>iteration_dialog_log.py</code>）</td></tr>
+<tr><td nowrap width="1%"><strong>专利簇清单</strong></td><td>一次交付 2 件及以上相关专利时，额外生成通俗说明清单：整体目的、每件侧重点、方法/系统区别、交叉边界与阅读路线（<code>patent_family_explainer.md</code>）</td></tr>
 </tbody>
 </table>
 
 **Office 抽取**：`.docx` / `.pptx` 先用本仓库 `docx_to_md.py` / `pptx_to_md.py` 转为 Markdown 再扫描（见 `SKILL.md`）。
 
-**Python 依赖（分文件）**：
-- **基础（Office / 交底书转换）**：根目录 [`requirements.txt`](requirements.txt) — `pip install -r requirements.txt`
-- **查新（国知局公布公告站，可选）**：[`tools/requirements-cnipa.txt`](tools/requirements-cnipa.txt) — `pip install -r tools/requirements-cnipa.txt`，再执行 `python -m playwright install chromium`  
-  不装亦可：Step 5 将按 `prior_art_search.md` 仅用 **WebSearch** 降级。详见 [INSTALL.md](INSTALL.md)、[tools/README.md](tools/README.md)。
+**Python 依赖**：根目录 [`requirements.txt`](requirements.txt) — `pip install -r requirements.txt`（含 `latex2mathml`、`PyYAML`、`playwright`；`matplotlib` 为可选，仅公式 OMML 失败且用户确认后安装）。
+
+**浏览器**：查新与 mermaid 出图共用 Playwright，优先用系统 Chrome/Edge（`python tools/browser.py --probe` 探测）；仅无系统浏览器时 `python -m playwright install chromium`。**无需 Node.js / npm / mmdc**。详见 [INSTALL.md](INSTALL.md)、[tools/README.md](tools/README.md)。
 
 ---
 
@@ -79,12 +79,12 @@ pip install -r requirements.txt
 ```
 
 ```bash
-# 可选：国知局查新（epub.cnipa.gov.cn）
-pip install -r tools/requirements-cnipa.txt
+# 可选：无系统 Chrome/Edge 时才需要（查新与 mermaid 共用）
+python tools/browser.py --probe   # 先探测；ok=true 时禁止再装浏览器
 python -m playwright install chromium
 ```
 
-图示定稿另需 **Node.js**；在 `tools/` 下执行 `npm install` 或使用 `npx mmdc`（详见 [tools/README.md](tools/README.md)）。
+图示定稿由 **Playwright + 内置 `tools/vendor/mermaid.min.js`** 渲染，**无需 Node.js / npm / mmdc**（详见 [tools/README.md](tools/README.md)）。
 
 ---
 
@@ -111,16 +111,19 @@ patent-disclosure-skill/
 ├── prompts/                    # 分步模板（Agent Read 后遵循）
 │   ├── intake.md
 │   ├── project_scan.md
-│   ├── patent_points_analyzer.md
+│   ├── patent_points_analyzer.md   # 专利点资产清单 + 轻量初筛 + 取舍门禁
 │   ├── prior_art_search.md
 │   ├── disclosure_preview.md
 │   ├── disclosure_builder.md
 │   ├── disclosure_self_check.md
+│   ├── versioned_output.md         # 版本化目录规范（vN-说明-时间戳 + 版本索引）
+│   ├── patent_family_explainer.md  # 多件交付的专利簇通俗说明清单
 │   ├── iteration_context.md
 │   ├── merger.md
 │   ├── correction_handler.md
 │   └── template_reference.md
-├── tools/                      # mermaid_render、md_to_docx、docx_to_md、pptx_to_md；国知局 cnipa_epub_*（查新）；iteration_dialog_log 等
+├── references/                 # formulas/paradigms.yaml 公式范式库；schemas/formula_plan 合同；patent_type_search.yaml 类型检索映射
+├── tools/                      # mermaid_render（Playwright）、md_to_docx（OMML）、math_to_omml、formula_*（范式/校验）、browser、docx_to_md、pptx_to_md；国知局 cnipa_epub_*（查新）；iteration_dialog_log 等
 ├── docs/                       # PRD、仓库结构说明、运行效果截图（效果例-*.jpg）
 ├── examples/                   # 原材料示例（如 example_batch_job_scheduler/knowledge/）
 ├── outputs/                    # 用户产出，整目录 .gitignore
@@ -155,7 +158,7 @@ patent-disclosure-skill/
 
 - [技能入口与 Agent 流程](SKILL.md)（触发条件、`prompts/` 映射、工具表）
 - [详细安装说明](INSTALL.md)（Claude Code / Cursor 路径）
-- [图示与转换脚本](tools/README.md)（mermaid / mmdc、Word 导出、国知局 epub 查新工具）
+- [图示与转换脚本](tools/README.md)（mermaid / Playwright、Word 导出与 OMML 公式、公式范式校验、国知局 epub 查新工具）
 - [示例案件与原材料说明](examples/README.md)
 - [产品流程与目录约定](docs/PRD.md)
 - [工程结构说明](docs/skill-structure.md)

@@ -4,6 +4,9 @@ disclosures/
 *.tmp
 ~$*
 
+# 测试运行产物（test_math_render 等生成）
+tmp/
+
 # 国知局抓取结果缓存（tools/）
 tools/_last_result*.html
 

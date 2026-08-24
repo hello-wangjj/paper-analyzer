@@ -8,51 +8,56 @@
 **输出约定**（便于 Agent 抓取且不触发误判降级）：
 
 - **stdout**：**仅一行** ``EPUB_HITS_JSON:`` + JSON 数组（UTF-8，含中文标题与 ``abstract``）。
-- **stderr**：``EPUB_MERGE:`` / ``EPUB_NOTE:`` / ``EPUB_HINT:`` 等为 **ASCII**，减轻 PowerShell 把
-  含中文的 stderr 当成 ``NativeCommandError``，以及 ``2>&1`` 合并流时的乱码。stdout 上 JSON 仍为 UTF-8
-  中文。启动时 ``reconfigure`` UTF-8。
+- **stderr**：``EPUB_MERGE:`` / ``EPUB_NOTE:`` / ``EPUB_HINT:`` 等为 **ASCII**。
 
-**检索词拆分（仅按空白）**：命令行中所有参数会按 **Python 空白规则**（`str.split()`）拆成多段；
-**一段一查**，结果按公开号去重合并。**不在本脚本内**对长中文做自动分词或拆字——**相关度高的语义化
-检索单位须在 Agent 生成 Bash 前完成**（见 ``prompts/prior_art_search.md``「国知局检索词（生成阶段必做）」）。
-若需**整句一次**向公布站提交（站内 AND），请改用 ``cnipa_epub_crawler.py`` 单传一句。
-
-需已安装：pip install -r tools/requirements-cnipa.txt && python -m playwright install chromium
+**专利类型**：``--type invention|utility_model|design|all``（默认 ``all``）。
+对应首页勾选：发明公布+发明授权 / 实用新型 / 外观设计（见 ``tools/patent_type.py``）。
 
 用法：
 
   python tools/cnipa_epub_search.py 词1
-  python tools/cnipa_epub_search.py "短语 含 空格"
-  python tools/cnipa_epub_search.py 词甲 词乙 词丙
+  python tools/cnipa_epub_search.py --type utility_model 卡扣
+  python tools/cnipa_epub_search.py --type design 外壳造型
 
-**必须**至少有一个非空检索词；**不设默认**。
-
-若需将结果页 HTML 保存到磁盘，请改用 ``cnipa_epub_crawler.py``；若只对已有 HTML 文件做解析，
-请用 ``cnipa_epub_parse.py``。
-
-环境变量：与 ``cnipa_epub_crawler.py`` 相同（如 ``EPUB_WAF_MAX_WAIT_SEC``、``PLAYWRIGHT_HEADED``）。
+需已安装：``pip install playwright``（或根目录 ``requirements.txt``）。有系统 Chrome / Edge 时不必 ``playwright install chromium``。探测：``python tools/browser.py --probe``。
 """
 from __future__ import annotations
 
 import json
 import os
 import sys
+from pathlib import Path
+
+_TOOLS = Path(__file__).resolve().parent
+if str(_TOOLS) not in sys.path:
+    sys.path.insert(0, str(_TOOLS))
+
+from patent_type import TYPE_ALL, normalize_patent_type
+from stdio_utf8 import ensure_utf8_stdio
 
 _MAX_TERMS = 8
 
 
-def _ensure_utf8_stdio() -> None:
-    """在 Windows 等环境下将 stdout/stderr 设为 UTF-8，避免中文 JSON 在终端乱码导致误判检索失败。"""
-    for stream in (sys.stdout, sys.stderr):
-        try:
-            if hasattr(stream, "reconfigure"):
-                stream.reconfigure(encoding="utf-8", errors="replace")
-        except (OSError, ValueError, TypeError):
-            pass
+def _parse_argv(argv: list[str]) -> tuple[str, list[str]]:
+    patent_type = TYPE_ALL
+    rest: list[str] = []
+    i = 0
+    while i < len(argv):
+        a = argv[i]
+        if a in ("--type", "-t") and i + 1 < len(argv):
+            patent_type = normalize_patent_type(argv[i + 1], default=TYPE_ALL)
+            i += 2
+            continue
+        if a.startswith("--type="):
+            patent_type = normalize_patent_type(a.split("=", 1)[1], default=TYPE_ALL)
+            i += 1
+            continue
+        rest.append(a)
+        i += 1
+    return patent_type, rest
 
 
 def _terms_from_argv(argv: list[str]) -> list[str]:
-    """从所有 argv 片段中按空白拆分（等价 str.split，连续空格视为一次分隔）。"""
     terms: list[str] = []
     for a in argv:
         for part in (a or "").split():
@@ -78,18 +83,25 @@ def _dedupe_hits(hits_lists: list) -> list:
 
 
 def _usage() -> None:
-    print("usage: python tools/cnipa_epub_search.py <term> [more terms...]", file=sys.stderr)
     print(
-        "whitespace splits to multiple terms; one Playwright run per term; merge by pub_number.",
+        "usage: python tools/cnipa_epub_search.py [--type invention|utility_model|design|all] <term> [...]",
         file=sys.stderr,
     )
-    print('example: python tools/cnipa_epub_search.py "batch 调度 异构"', file=sys.stderr)
+    print(
+        "whitespace splits to multiple terms; one browser for all terms; merge by pub_number.",
+        file=sys.stderr,
+    )
+    print(
+        'example: python tools/cnipa_epub_search.py --type utility_model 卡扣',
+        file=sys.stderr,
+    )
 
 
 def main(argv: list[str] | None = None) -> int:
-    _ensure_utf8_stdio()
+    ensure_utf8_stdio()
     argv = argv if argv is not None else sys.argv[1:]
-    terms = _terms_from_argv(argv)
+    patent_type, rest = _parse_argv(argv)
+    terms = _terms_from_argv(rest)
     if not terms:
         _usage()
         return 2
@@ -104,60 +116,60 @@ def main(argv: list[str] | None = None) -> int:
     os.environ.setdefault("EPUB_WAF_MAX_WAIT_SEC", "180")
 
     try:
-        import playwright  # noqa: F401
+        import playwright
     except ImportError:
         print(
-            "ERROR: pip install -r tools/requirements-cnipa.txt && python -m playwright install chromium",
+            "ERROR: pip install playwright  (or: pip install -r requirements.txt)",
+            file=sys.stderr,
+        )
+        print(
+            "HINT: python tools/browser.py --probe",
             file=sys.stderr,
         )
         return 1
 
-    from cnipa_epub_crawler import search_epub_keyword
+    from cnipa_epub_crawler import search_epub_keywords
     from cnipa_epub_parse import hits_to_jsonable
 
     multi = len(terms) > 1
-    last_html = ""
-    all_batches: list = []
 
     try:
-        for kw in terms:
-            html, hits = search_epub_keyword(kw)
-            last_html = html
-            all_batches.append(hits)
+        rows = search_epub_keywords(terms, patent_type=patent_type)
     except Exception as e:
         print("CNIPA_EPUB_ERROR:", e, file=sys.stderr)
         return 1
 
+    last_html = rows[-1][0] if rows else ""
+    all_batches = [hits for _html, hits in rows]
+
     if multi:
         hits = _dedupe_hits(all_batches)
         print(
-            "EPUB_MERGE: terms=%d merged_hits=%d" % (len(terms), len(hits)),
+            "EPUB_MERGE: terms=%d type=%s merged_hits=%d"
+            % (len(terms), patent_type, len(hits)),
             file=sys.stderr,
             flush=True,
         )
     else:
         hits = all_batches[0]
+        print(
+            "EPUB_NOTE: type=%s" % patent_type,
+            file=sys.stderr,
+            flush=True,
+        )
 
     if not hits and last_html and len(last_html) < 20_000:
-        if multi:
-            print(
-                "EPUB_HINT: 0 hits after multi-term run; try broader terms or WebSearch (prior_art_search.md)",
-                file=sys.stderr,
-                flush=True,
-            )
-        else:
-            print(
-                "EPUB_HINT: 0 hits; try more terms (space-separated) or WebSearch",
-                file=sys.stderr,
-                flush=True,
-            )
+        print(
+            "EPUB_HINT: 0 hits; try broader terms, --type all, or WebSearch",
+            file=sys.stderr,
+            flush=True,
+        )
 
     print(
         "EPUB_NOTE: html_bytes=%d disk=0" % len(last_html),
         file=sys.stderr,
         flush=True,
     )
-    # 仅此一行写入 stdout，供管道/Agent 稳定解析（勿混入多行文本，避免误判未命中）
     print(
         "EPUB_HITS_JSON:",
         json.dumps(hits_to_jsonable(hits), ensure_ascii=False),

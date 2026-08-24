@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 r"""
 将 Markdown 中的 LaTeX 公式渲染为 PNG（matplotlib mathtext），**保留 `$...$` / `\(...\)` / `$$...$$` / `\[...\]` 原文**，
 图片引用写入 HTML 注释 ``<!-- ![...](path) -->``（预览不显示图，Word 仍嵌入）。
@@ -13,7 +13,8 @@ r"""
   python tools/math_render.py -i draft.md -o draft_with_math.md
   python tools/math_render.py -i draft.md -o out.md --assets-dir math_figures
 
-依赖：``pip install matplotlib``（见仓库根 ``requirements.txt``）。
+依赖：``pip install matplotlib``（**可选**，不在根目录 ``requirements.txt`` 默认列表中）。
+OMML 失败且用户确认后才安装；见 ``md_to_docx.py --math-render``。
 """
 from __future__ import annotations
 
@@ -22,14 +23,51 @@ import re
 import sys
 from pathlib import Path
 
+try:
+    from stdio_utf8 import ensure_utf8_stdio
+except ImportError:
+    from tools.shared.stdio_utf8 import ensure_utf8_stdio
+
 _DEFAULT_ASSETS = "math_figures"
 _INLINE_RE = re.compile(
     r"(?<!\$)\$(?!\$)((?:\\.|[^$\n])+?)\$(?!\$)(?!\s*<!--)"
 )
-_INLINE_PAREN_RE = re.compile(r"\\\(((?:\\.|[^)])+?)\\\)(?!\s*<!--)")
 _HIDDEN_IMG_COMMENT_RE = re.compile(
     r"<!--\s*!\[[^\]]*\]\([^)]+\)\s*-->"
 )
+
+
+def iter_inline_paren_spans(text: str) -> list[tuple[int, int, str]]:
+    """扫描 ``\\(...\\)``；终结符须为 ``\\)``，允许公式内出现 ``\\max(...)`` 等裸 ``)``。
+
+    旧正则 ``[^)]`` 会在首个 ``)`` 处截断，导致嵌套括号公式整段匹配失败并原样露出转义符。
+    """
+    spans: list[tuple[int, int, str]] = []
+    i = 0
+    n = len(text)
+    while i < n:
+        if text.startswith("\\(", i):
+            j = i + 2
+            while j < n:
+                if text.startswith("\\)", j):
+                    end = j + 2
+                    # 已带 HTML 注释图引用则跳过（定稿二次渲染）
+                    rest = text[end:]
+                    if re.match(r"\s*<!--\s*!\[", rest):
+                        i = end
+                        break
+                    spans.append((i, end, text[i + 2 : j]))
+                    i = end
+                    break
+                if text[j] == "\\" and j + 1 < n:
+                    j += 2
+                else:
+                    j += 1
+            else:
+                i += 2
+        else:
+            i += 1
+    return spans
 
 # matplotlib mathtext 不识别部分 LaTeX 简写；按「长命令优先」映射为 mathtext 符号
 _LATEX_CMD_ALIASES: tuple[tuple[str, str], ...] = (
@@ -66,6 +104,8 @@ def normalize_latex_for_mathtext(body: str) -> str:
     out = re.sub(r"\\label\s*\{[^{}]*\}", "", out)
     out = re.sub(r"\\tag\s*\{([^{}]*)\}", r"\\quad (\1)", out)
     out = re.sub(r"\\notag\b", "", out)
+    # mathtext 无 \big/\left；去掉尺寸括号命令，保留内容括号
+    out = re.sub(r"\\(big+|Big+|left|right|bigl|bigr|Bigl|Bigr)\b", "", out)
     out = re.sub(r"\s+", " ", out).strip()
     return out
 
@@ -154,12 +194,12 @@ def _replace_inline_math(
         inner = m.group(1)
         return render_one(inner, f"${inner}$")
 
-    def repl_paren(m: re.Match[str]) -> str:
-        inner = m.group(1)
-        return render_one(inner, f"\\({inner}\\)")
-
     text = _INLINE_RE.sub(repl_dollar, text)
-    text = _INLINE_PAREN_RE.sub(repl_paren, text)
+
+    # 自右向左替换，避免偏移
+    for start, end, inner in reversed(iter_inline_paren_spans(text)):
+        repl = render_one(inner, f"\\({inner}\\)")
+        text = text[:start] + repl + text[end:]
     return text, ok, failed
 
 
@@ -168,9 +208,9 @@ def render_markdown_math(
     *,
     out_md_path: Path,
     assets_rel: str = _DEFAULT_ASSETS,
-    dpi: int = 200,
-    block_fontsize: float = 10.5,
-    inline_fontsize: float = 10.5,
+    dpi: int = 220,
+    block_fontsize: float = 12.0,
+    inline_fontsize: float = 11.0,
 ) -> tuple[str, int, int]:
     """
     返回 (新 markdown, 成功渲染数, 失败保留原文数)。
@@ -340,6 +380,7 @@ def render_markdown_math(
 
 
 def main(argv: list[str] | None = None) -> int:
+    ensure_utf8_stdio()
     p = argparse.ArgumentParser(description="Markdown LaTeX 公式 → PNG")
     p.add_argument("-i", "--input", required=True, type=Path)
     p.add_argument("-o", "--output", required=True, type=Path)
@@ -348,9 +389,9 @@ def main(argv: list[str] | None = None) -> int:
         default=_DEFAULT_ASSETS,
         help=f"PNG 相对输出 .md 的子目录（默认 {_DEFAULT_ASSETS}）",
     )
-    p.add_argument("--dpi", type=int, default=200)
-    p.add_argument("--block-fontsize", type=float, default=10.5)
-    p.add_argument("--inline-fontsize", type=float, default=10.5)
+    p.add_argument("--dpi", type=int, default=220)
+    p.add_argument("--block-fontsize", type=float, default=12.0)
+    p.add_argument("--inline-fontsize", type=float, default=11.0)
     args = p.parse_args(argv)
 
     in_path = args.input.resolve()
@@ -359,7 +400,7 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     try:
-        import matplotlib  # noqa: F401
+        import matplotlib
     except ImportError:
         print("请先安装: pip install matplotlib", file=sys.stderr)
         return 1
@@ -377,6 +418,7 @@ def main(argv: list[str] | None = None) -> int:
         inline_fontsize=args.inline_fontsize,
     )
     out_path.write_text(new_md, encoding="utf-8")
+    print(f"MATH_PNG: ok={ok} fail={failed}", file=sys.stderr)
     msg = f"已写入 {out_path}（公式：{ok} 处已转为 PNG"
     if failed:
         msg += f"，{failed} 处失败已保留原文"

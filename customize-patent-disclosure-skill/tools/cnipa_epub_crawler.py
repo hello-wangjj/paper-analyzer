@@ -2,18 +2,18 @@
 """
 中国专利公布公告网站点：http://epub.cnipa.gov.cn/ —— **首页「公布公告查询」** 检索（#indexForm / #searchStr）。
 
-须安装 **Playwright + Chromium**。若只需内存中解析、不落盘 HTML，优先用同目录 **`cnipa_epub_search.py`**；
+须安装 **Playwright**。浏览器启动见 ``tools/browser.py``（系统 Chrome → Edge → 自带 Chromium；有系统浏览器时不必 ``playwright install chromium``）。若只需内存中解析、不落盘 HTML，优先用同目录 **`cnipa_epub_search.py`**；
 本文件侧重 **写出结果页 HTML** 与可插拔的 ``fetch_epub_result_html`` API。
 
 -------------------------------------------------------------------------------
 一、整体流程（单次检索）
 -------------------------------------------------------------------------------
-1. 启动 Chromium（默认无头；可用环境变量改为有界面）。
+1. 启动浏览器（默认无头；系统 Chrome → Edge → 自带 Chromium；可用环境变量改为有界面）。
 2. 新建浏览器上下文：设定 **桌面 Chrome UA**、**zh-CN**、固定 **视口**（见 ``_new_context``），使请求形态接近普通用户浏览器。
 3. ``page.goto`` 站点首页，**wait_until="load"**。
 4. **等待首页可检索**：首页在访客到达后会先经 **前端脚本/WAF 一类逻辑**，未通过前 **不会出现** 检索输入框 ``#searchStr``。本实现通过 **周期性轮询 DOM**（每 3 秒一次，总时长见 ``EPUB_WAF_MAX_WAIT_SEC``，默认 180s）直到 ``#searchStr`` 出现；**不是**用 requests 直接 POST 能等价替代的步骤。
-5. ``page.fill`` 将关键词写入 ``#searchStr``，对 ``#indexForm`` 执行 **submit**（而非单独点按钮），并 ``expect_navigation`` 等待结果页 **load**。
-6. 结果页 **安定等待**：依次尝试 **load / networkidle**（超时则忽略），再 **固定短时 sleep**，减轻列表/统计脚本未跑完就取 HTML 导致的空壳或半截 DOM。
+5. ``page.fill`` 将关键词写入 ``#searchStr``，对 ``#indexForm`` 执行 **submit**（而非单独点按钮），并等待结果页导航 **commit**。
+6. 等待结果页就绪：标题为 **「专利查询结果展示」或「无查询结果」**（见 ``EPUB_TITLE_*`` 常量），且 ``#result`` 内出现列表条目（``div.item`` / ``h1.title``）或明确零结果文案；不等待完整 ``load``。国知局改版时需同步调整常量与 ``_RESULT_PAGE_READY_JS``。
 7. ``page.content()`` 取全页 HTML；若处于导航中抛错则 **重试退避**（``_safe_page_content``），避免竞态。
 8. 后续解析由 **`cnipa_epub_parse.py`** 完成（本文件 ``search_epub_keyword`` 内会调用）。
 
@@ -49,20 +49,43 @@ from typing import Callable
 
 from playwright.sync_api import Browser, BrowserContext, Error, Page, Playwright, sync_playwright
 
+_TOOLS = Path(__file__).resolve().parent
+if str(_TOOLS) not in sys.path:
+    sys.path.insert(0, str(_TOOLS))
+
 from cnipa_epub_parse import EpubSearchHit, hits_to_jsonable, parse_search_result_html
-
-
-def _ensure_utf8_stdio() -> None:
-    """减轻 Windows 终端下 JSON 中文乱码（与 cnipa_epub_search.py 一致）。"""
-    for stream in (sys.stdout, sys.stderr):
-        try:
-            if hasattr(stream, "reconfigure"):
-                stream.reconfigure(encoding="utf-8", errors="replace")
-        except (OSError, ValueError, TypeError):
-            pass
+from browser import launch_chromium
+from stdio_utf8 import ensure_utf8_stdio
+from patent_type import (
+    TYPE_ALL,
+    epub_checkbox_states,
+    normalize_patent_type,
+)
 
 
 EPUB_BASE = "http://epub.cnipa.gov.cn/"
+# 国知局 /Dxb/IndexQuery 结果页 <title>；改版时须同步单测与 _RESULT_PAGE_READY_JS
+EPUB_TITLE_RESULT = "专利查询结果展示"
+EPUB_TITLE_NO_HIT = "无查询结果"
+# 在浏览器内判断结果页可解析：title + #result DOM（列表或零结果文案）
+_RESULT_PAGE_READY_JS = """(titles) => {
+    const t = document.title.trim();
+    if (t === titles.noHit) return true;
+    if (t !== titles.result) return false;
+    const r = document.querySelector("#result");
+    if (!r) return false;
+    if (r.querySelector("div.item, h1.title")) return true;
+    const html = r.innerHTML;
+    if (
+        html.includes("无查询结果") ||
+        html.includes("没有找到") ||
+        html.includes("未检索到") ||
+        html.includes("0条")
+    ) {
+        return true;
+    }
+    return false;
+}"""
 DEFAULT_USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
@@ -97,18 +120,6 @@ def wait_for_epub_home_ready(page: Page, *, max_wait_sec: float | None = None) -
     )
 
 
-def _wait_result_page_settled(page: Page) -> None:
-    try:
-        page.wait_for_load_state("load", timeout=30_000)
-    except Exception:
-        pass
-    try:
-        page.wait_for_load_state("networkidle", timeout=25_000)
-    except Exception:
-        pass
-    page.wait_for_timeout(800)
-
-
 def _safe_page_content(page: Page, *, max_attempts: int = 10) -> str:
     last_err: Exception | None = None
     for i in range(max_attempts):
@@ -129,9 +140,49 @@ def _safe_page_content(page: Page, *, max_attempts: int = 10) -> str:
     raise RuntimeError("_safe_page_content: 未返回内容")
 
 
-def submit_index_search(page: Page, keyword: str) -> None:
+def _wait_result_page_ready(page: Page) -> None:
+    """等结果页 title 与 #result 列表/零结果 DOM 就绪（不等完整 load）。"""
+    page.wait_for_function(
+        _RESULT_PAGE_READY_JS,
+        arg={"result": EPUB_TITLE_RESULT, "noHit": EPUB_TITLE_NO_HIT},
+        timeout=120_000,
+    )
+
+
+def apply_epub_type_filter(page: Page, patent_type: str = TYPE_ALL) -> None:
+    """按类型勾选首页 #fmgb/#fmsq/#xxsq/#wgsq（与截图四类一致）。"""
+    states = epub_checkbox_states(patent_type)
+    for cid, want in states.items():
+        box = page.query_selector(f"#{cid}")
+        if not box:
+            continue
+        try:
+            if want:
+                box.check(force=True)
+            else:
+                box.uncheck(force=True)
+        except Error:
+            page.evaluate(
+                """({id, checked}) => {
+                    const el = document.getElementById(id);
+                    if (!el) return;
+                    el.checked = checked;
+                    el.dispatchEvent(new Event('change', { bubbles: true }));
+                    el.dispatchEvent(new Event('click', { bubbles: true }));
+                }""",
+                {"id": cid, "checked": want},
+            )
+
+
+def submit_index_search(
+    page: Page,
+    keyword: str,
+    *,
+    patent_type: str = TYPE_ALL,
+) -> None:
+    apply_epub_type_filter(page, patent_type)
     page.fill("#searchStr", keyword)
-    with page.expect_navigation(timeout=120_000, wait_until="load"):
+    with page.expect_navigation(timeout=120_000, wait_until="commit"):
         form = page.query_selector("#indexForm")
         if form:
             form.evaluate("el => el.submit()")
@@ -142,27 +193,47 @@ def submit_index_search(page: Page, keyword: str) -> None:
                 if (f) f.submit();
             }"""
             )
-    _wait_result_page_settled(page)
+    _wait_result_page_ready(page)
 
 
 def fetch_epub_result_html(
     keyword: str,
     *,
+    patent_type: str = TYPE_ALL,
     playwright_factory: Callable[[], Playwright] | None = None,
 ) -> str:
     """
     只拉取检索结果页 HTML，不在此函数内做正文解析。
     解析请使用 ``cnipa_epub_parse.parse_search_result_html(html)``。
     """
+    rows = search_epub_keywords(
+        [keyword], patent_type=patent_type, playwright_factory=playwright_factory
+    )
+    return rows[0][0]
+
+
+def search_epub_keywords(
+    terms: list[str],
+    *,
+    patent_type: str = TYPE_ALL,
+    playwright_factory: Callable[[], Playwright] | None = None,
+) -> list[tuple[str, list[EpubSearchHit]]]:
+    """一场检索共用一个浏览器；一词一页，返回与 ``terms`` 等长的 ``(html, hits)`` 列表。"""
+    if not terms:
+        return []
     pw_gen = playwright_factory or sync_playwright
     with pw_gen() as p:
         browser = _launch_browser(p)
         context = _new_context(browser)
         try:
             page = context.new_page()
-            wait_for_epub_home_ready(page)
-            submit_index_search(page, keyword)
-            return _safe_page_content(page)
+            out: list[tuple[str, list[EpubSearchHit]]] = []
+            for keyword in terms:
+                wait_for_epub_home_ready(page)
+                submit_index_search(page, keyword, patent_type=patent_type)
+                html = _safe_page_content(page)
+                out.append((html, parse_search_result_html(html)))
+            return out
         finally:
             context.close()
             browser.close()
@@ -171,30 +242,30 @@ def fetch_epub_result_html(
 def search_epub_keyword(
     keyword: str,
     *,
+    patent_type: str = TYPE_ALL,
     playwright_factory: Callable[[], Playwright] | None = None,
 ) -> tuple[str, list[EpubSearchHit]]:
-    html = fetch_epub_result_html(keyword, playwright_factory=playwright_factory)
-    return html, parse_search_result_html(html)
+    rows = search_epub_keywords(
+        [keyword], patent_type=patent_type, playwright_factory=playwright_factory
+    )
+    return rows[0]
 
 
 def search_epub_keyword_with_page(
     page: Page,
     keyword: str,
+    *,
+    patent_type: str = TYPE_ALL,
 ) -> tuple[str, list[EpubSearchHit]]:
     wait_for_epub_home_ready(page)
-    submit_index_search(page, keyword)
+    submit_index_search(page, keyword, patent_type=patent_type)
     html = _safe_page_content(page)
     return html, parse_search_result_html(html)
 
 
 def _launch_browser(p: Playwright) -> Browser:
-    return p.chromium.launch(
-        headless=not _headed(),
-        args=[
-            "--disable-blink-features=AutomationControlled",
-            "--no-sandbox",
-        ],
-    )
+    browser, _label = launch_chromium(p, headless=not _headed())
+    return browser
 
 
 def _new_context(browser: Browser) -> BrowserContext:
@@ -222,14 +293,29 @@ def _dump_home_debug() -> None:
 
 
 if __name__ == "__main__":
-    _ensure_utf8_stdio()
+    ensure_utf8_stdio()
     argv = [a for a in sys.argv[1:] if a.strip()]
     if argv and argv[0] in ("--dump-home", "-d"):
         _dump_home_debug()
         sys.exit(0)
-    kw = (argv[0] if argv else "批处理").strip()
+    patent_type = TYPE_ALL
+    filtered: list[str] = []
+    i = 0
+    while i < len(argv):
+        a = argv[i]
+        if a in ("--type", "-t") and i + 1 < len(argv):
+            patent_type = normalize_patent_type(argv[i + 1], default=TYPE_ALL)
+            i += 2
+            continue
+        if a.startswith("--type="):
+            patent_type = normalize_patent_type(a.split("=", 1)[1], default=TYPE_ALL)
+            i += 1
+            continue
+        filtered.append(a)
+        i += 1
+    kw = (filtered[0] if filtered else "批处理").strip()
     try:
-        out_html, hits = search_epub_keyword(kw)
+        out_html, hits = search_epub_keyword(kw, patent_type=patent_type)
     except Exception as e:
         print("CNIPA_EPUB_ERROR:", e, file=sys.stderr)
         sys.exit(1)
