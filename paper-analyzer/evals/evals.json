@@ -5,28 +5,42 @@
       "id": 1,
       "name": "mht-tracking-reviewer-analysis",
       "prompt": "请分析这篇关于多假设跟踪（MHT）的论文，要求 reviewer-level 批判性解读 + PaddlePaddle 代码实现。\n\n论文标题：Multiple Hypothesis Tracking for Multiple Target Tracking\n\n摘要：\nMultiple Hypothesis Tracking (MHT) is a well-established technique for tracking multiple targets in the presence of clutter and missed detections. Unlike conventional single-hypothesis trackers, MHT maintains multiple association hypotheses simultaneously, delaying hard decisions until more evidence becomes available. This paper presents a comprehensive framework for MHT, including hypothesis generation, pruning, and merging strategies. We derive the optimal pruning strategy based on hypothesis probabilities and show that MHT significantly outperforms JPDA and GNN in dense target scenarios.\n\n方法概述：\n1. Hypothesis Generation: For each new measurement, generate all possible association hypotheses considering track-to-measurement assignments, missed detections, and new tracks.\n2. Hypothesis Scoring: Each hypothesis H_k is assigned a probability P(H_k|Z_1:k). The probability is computed using Bayesian updating: P(H_k|Z_1:k) ∝ P(Z_k|H_k) · P(H_k|Z_1:k-1)\n3. N-scan Pruning: Only retain hypotheses that differ in the last N scans (typically N=4-8).\n4. Hypothesis Merging: Merge hypotheses that are sufficiently similar (similarity > 0.95).\n5. State Estimation: For each confirmed track, use Kalman Filter.\n\n实验结果：\n- Dataset: Simulated dense traffic scenario with 20 targets\n- MHT: 95% track purity vs JPDA's 88% and GNN's 82%\n- ID switches: MHT=0.5, JPDA=2.3, GNN=4.1 per 100 frames\n- Processing time: MHT=45ms, JPDA=18ms, GNN=8ms per frame",
-      "expected_output": "输出必须包含：1) 固定章节结构（0-7 + 附录）2) 主张表（1.5）区分显式/隐含主张 3) 关键公式就地解释（贝叶斯更新公式，含符号表+自然语言+代码映射）4) 实验-主张对应矩阵（3.5）5) 主结果表嵌入 3.3 6) 严肃反驳（第5章）如 N-scan pruning 的最优性证明是否充分 7) PaddlePaddle 代码实现 8) 综合评分（7.3）",
+      "expected_output": "输出必须包含：1) 固定章节结构（0-7 + 附录 A-D），第 0 章为三分钟读懂 2) 0.6 已判定论文类型（方法论文，兼理论成分）3) Claim—Evidence—Verdict 总表（3.1）区分显式/隐含主张，含支撑强度与最大缺口 4) 关键公式就地解释（贝叶斯更新公式：为什么需要→例子→公式→符号→作用→边界）5) 主结果表嵌入 3.2 且实验对应 Claim 可查 6) 严肃反驳（第5章）如 N-scan pruning 的最优性证明是否充分 7) PaddlePaddle 代码实现（第6章）8) 最终判断可行动（7.3 值得精读/浏览/暂不建议 + 最小判别路径），默认无无锚点小数评分 9) 附录 D 每个 Claim 独立定位",
       "files": []
     },
     {
       "id": 2,
       "name": "markdown-mot-paper-critical-review",
       "prompt": "请 reviewer-level 分析这篇 markdown 论文，要求批判性审稿 + 代码实现。\n\n```markdown\n# 基于注意力机制的多目标跟踪算法\n\n**作者**: 张三, 李四\n**单位**: 自动驾驶研究所\n**日期**: 2026年4月\n\n## 摘要\n\n本文提出了一种基于注意力机制的多目标跟踪算法，通过自注意力机制捕捉目标间的时空关联关系。实验表明，在KITTI数据集上，MOTA提升了3.5%。\n\n## 1. 引言\n\n多目标跟踪（MOT）是自动驾驶的核心任务。现有方法存在以下局限：\n1. 数据关联依赖距离度量，忽略上下文信息\n2. 无法处理长时间遮挡\n3. ID交换频繁\n\n本文贡献：\n1. 提出时空注意力模块（STAM）\n2. 设计自适应关联策略\n3. 在KITTI和nuScenes上达到SOTA\n\n## 2. 方法\n\n### 2.1 时空注意力模块\n\n$$\n\\alpha_{ij} = \\frac{\\exp(e_{ij})}{\\sum_{k=1}^{N} \\exp(e_{ik})}\n$$\n\n其中 $e_{ij} = f_{\\theta}(f_i, f_j)$ 计算特征相似度。\n\n### 2.2 自适应关联策略\n\n$$\nP_{ij} = \\frac{\\exp((g_{ij} - \\tau)^{-1})}{\\sum_{k} \\exp((g_{ik} - \\tau)^{-1})}\n$$\n\n### 2.3 网络架构\n\n| 模块 | 输入 | 输出 |\n|------|------|------|\n| 特征提取 | 图像+检测框 | 特征向量 |\n| STAM | 特征序列 | 注意力权重 |\n| 关联 | 注意力权重 | 关联矩阵 |\n| 更新 | 关联矩阵 | 轨迹状态 |\n\n## 3. 实验\n\n| 方法 | MOTA ↑ | MOTP ↑ | IDS ↓ | FPS ↑ |\n|------|--------|--------|-------|------|\n| SORT | 62.3 | 71.2 | 452 | 260 |\n| DeepSORT | 64.1 | 72.5 | 321 | 45 |\n| 本文方法 | 67.6 | 74.3 | 198 | 52 |\n\n## 4. 结论\n\n本文提出了基于注意力机制的多目标跟踪算法，在保持实时性的同时显著提升了跟踪精度。\n```",
-      "expected_output": "输出必须包含：1) 固定章节（0-7 + 附录）2) 主张表标注显式/隐含 3) 公式就地解释（注意力权重公式 + Gumbel-Softmax 公式，含符号表和代码映射）4) 主结果表嵌入 3.3 + 消融表缺失说明 5) 实验-主张矩阵（3.5）6) 严肃反驳（如 Gumbel-Softmax 公式是否正确、消融实验缺失）7) PaddlePaddle 代码 8) 不确定性标注（nuScenes 结果论文未给出具体数值）",
+      "expected_output": "输出必须包含：1) 固定章节（0-7 + 附录 A-D）2) Claim—Evidence—Verdict 总表（3.1）标注显式/隐含 3) 公式就地解释（注意力权重公式 + Gumbel-Softmax 公式：为什么需要→例子→符号→作用→边界）4) 主结果表嵌入 3.2 + 消融缺失在 3.3/3.4 明确说明（原文未提供及其判断影响）5) 严肃反驳（第5章，如 Gumbel-Softmax 公式是否正确、消融实验缺失，绑定 Claim ID）6) PaddlePaddle 代码（第6章）7) 不确定性标注（nuScenes 结果论文未给出具体数值）8) 附录 D 证据定位覆盖全部 Claim",
       "files": []
     },
     {
       "id": 3,
       "name": "arxiv-link-full-pipeline",
       "prompt": "请分析这篇 arXiv 论文：https://arxiv.org/abs/2208.03039\n\n这是关于 PointNet++ 的论文，用于点云处理。要求：1) reviewer-level 批判性分析 2) 特别关注在自动驾驶 4D 雷达点云处理中的适用性 3) PaddlePaddle 代码实现",
-      "expected_output": "输出必须包含：1) 固定章节结构 2) 主张表 3) Set Abstraction 和 Feature Propagation 的关键公式就地解释 4) 实验-主张对应矩阵 5) 对 PointNet++ 在雷达点云上适用性的质疑（第5章）6) PaddlePaddle 代码 7) 相关论文表（4.x）",
+      "expected_output": "输出必须包含：1) 固定章节结构（0-7 + 附录 A-D）2) 0.6 论文类型判定（方法论文）3) Claim—Evidence—Verdict 总表（3.1）4) Set Abstraction 和 Feature Propagation 的关键公式就地解释（解释顺序完整）5) 对 PointNet++ 在雷达点云上适用性的质疑（第5章，工程适用性角度，考虑稀疏性/噪声/实时性）6) PaddlePaddle 代码（第6章）7) 相关论文表（4.3）只列实际核对过的文献，附录 C 有直接链接",
       "files": []
     },
     {
       "id": 4,
       "name": "casual-request-natural-language",
       "prompt": "帮我看看这篇论文 https://arxiv.org/abs/2304.02643 讲了啥，能不能用在我们雷达跟踪上，顺便给个飞桨的实现",
-      "expected_output": "自然语言触发测试。输出应包含完整的固定章节报告（0-7+附录），包括批判性分析、公式解释、实验审查、代码实现。不能因为用户语气随意就降低分析深度。",
+      "expected_output": "自然语言触发测试。输出应包含完整的固定章节报告（0-7+附录 A-D），包括批判性分析、公式解释、实验审查、代码实现。不能因为用户语气随意就降低分析深度。第 7 章最终判断需回答'能否用于雷达跟踪'（最适合的使用场景 / 当前不应外推到）。",
+      "files": []
+    },
+    {
+      "id": 5,
+      "name": "theory-paper-type-adaptation",
+      "prompt": "请 reviewer-level 分析这篇理论论文（纯证明、无实验）：\n\n```markdown\n# 稠密杂波下 JPDA 协方差的一致性界\n\n## 摘要\n我们证明在杂波密度满足 Poisson 分布、检测概率一致有界的假设下，JPDA 的协方差估计误差以 O(1/√k) 收敛，并给出显式常数。\n\n## 定理 1\n假设 3.1-3.4 成立，则对任意 ε>0，P(||Σ̂_k - Σ_k|| > ε) ≤ C·exp(-c·k·ε²)。\n\n## 证明思路\n由 Chebyshev 不等式与杂波独立性质，分三步：引理 1（杂波项鞅差），引理 2（检测项有界），引理 3（三角阵收敛）。\n\n## 结论\n该界解释了 JPDA 在长序列中的稳定性。\n```",
+      "expected_output": "论文类型适配测试。报告必须：1) 判定为理论论文，不硬套实验配额——不要求主结果表/消融表，不人为补公式 2) 证据载体用假设-引理-定理依赖、证明关键步骤检查（引理是否覆盖、是否有跳步）3) Claim-Evidence-Verdict 表以定理与假设为证据 4) 第 6 章退化为验证性实现（最小数值例子验证 O(1/√k) 收敛）或明确说明 5) 第 5 章质疑假设 3.1-3.4 在车载雷达场景的现实性（杂波非 Poisson、检测概率时变）6) 缺失实验处写'原文未提供'及判断影响，不写空白章节",
+      "files": []
+    },
+    {
+      "id": 6,
+      "name": "quick-read-mode",
+      "prompt": "快速给我讲下这篇论文的核心思想就行，不用太细：[粘贴一篇方法论文全文]",
+      "expected_output": "速读模式测试。输出为精简报告：覆盖核心思路、中心结论、决定性证据和边界；可省略次要审稿细节、附录和代码实现，但不能把推测写成事实，仍需标注不确定信息。不应生成完整 0-7 章报告。",
       "files": []
     }
   ]
