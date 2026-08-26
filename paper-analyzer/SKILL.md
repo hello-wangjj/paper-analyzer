@@ -25,9 +25,7 @@ description: 深度分析自动驾驶领域学术论文的可执行 skill。适�
 
 ### 2.1 PDF 文件
 
-使用 `scripts/extract_pdf.py` 处理，支持两种引擎（通过 `--engine` 选择）：
-
-**PaddleOCR（默认）**：调用 AI Studio API（PaddleOCR-VL-1.5），依赖 `requests`。
+使用 `scripts/extract_pdf.py` 处理（PaddleOCR AI Studio API，PaddleOCR-VL-1.6，依赖 `requests`）：
 ```bash
 # 本地 PDF
 python scripts/extract_pdf.py <PDF路径>
@@ -37,12 +35,7 @@ python scripts/extract_pdf.py --arxiv https://arxiv.org/abs/<ID>
 python scripts/extract_pdf.py <https://...pdf>
 ```
 
-**mineru（备选）**：调用 mineru-open-api CLI，需预装 mineru-open-api。
-```bash
-python scripts/extract_pdf.py <PDF路径> --engine mineru
-```
-
-**统一接口**：`extract_from_pdf(path, engine="paddleocr")` 和 `extract_from_arxiv(url, engine="paddleocr")`。
+**统一接口**：`extract_from_pdf(path)` 和 `extract_from_arxiv(url)`。
 
 **PaddleOCR 工作流程**：提交任务 → 轮询等待 → 下载结果（每页 Markdown + 图片存入 `ocr_output/` 子目录）→ 合并为单文件放到 **PDF 同目录**。必须通过环境变量 `PADDLEOCR_TOKEN` 配置 API Token，未设置时会报错提示。
 

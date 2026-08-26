@@ -1,22 +1,18 @@
 """
-PDF文本提取工具 - 双引擎（PaddleOCR AI Studio API + mineru-open-api 备选）
+PDF文本提取工具 - PaddleOCR AI Studio API
 
 用于从PDF文件中提取文本内容，保留章节结构、公式、表格和图片。
 支持：本地PDF文件、arXiv URL、HTTP文件链接
 
-引擎选择（--engine 参数）：
-  paddleocr（默认）: PaddleOCR-VL-1.5 HTTP API，依赖 requests
-  mineru: mineru-open-api CLI，依赖 mineru-open-api 已安装
+引擎：PaddleOCR-VL-1.6 jobs HTTP API，依赖 requests
 
 依赖：
-  paddleocr 引擎: pip install requests
-  mineru 引擎: pip install mineru-open-api (https://mineru.net/)
+  pip install requests
 """
 
 import json
 import os
 import re
-import subprocess
 import sys
 import time
 from pathlib import Path
@@ -28,7 +24,7 @@ import requests
 
 POCR_JOB_URL = "https://paddleocr.aistudio-app.com/api/v2/ocr/jobs"
 POCR_TOKEN = os.environ.get("PADDLEOCR_TOKEN", "")
-POCR_MODEL = "PaddleOCR-VL-1.5"
+POCR_MODEL = "PaddleOCR-VL-1.6"
 
 DEFAULT_POLL_INTERVAL = 5  # 秒
 DEFAULT_TIMEOUT = 600  # 10分钟总超时
@@ -95,6 +91,8 @@ def _pocr_poll_until_done(job_id: str, timeout: int = DEFAULT_TIMEOUT) -> Dict[s
             return data
         elif state == "failed":
             raise RuntimeError(f"PaddleOCR 任务失败: {data.get('errorMsg', '未知错误')}")
+        elif state == "pending":
+            print("  [PaddleOCR] 任务排队中...")
         elif state == "running":
             try:
                 p = data["extractProgress"]
@@ -191,93 +189,9 @@ def _extract_paddleocr(
         "page_files": page_files,
         "metadata": {
             "source": file_path,
-            "extractor": "PaddleOCR-VL-1.5",
+            "extractor": POCR_MODEL,
             "model": POCR_MODEL,
             "pages": pages,
-            "output_dir": output_dir,
-        },
-    }
-
-
-# ═══════════════════════════════════════════════════════════════
-# mineru-open-api 备选引擎
-# ═══════════════════════════════════════════════════════════════
-
-
-def _check_mineru_available() -> bool:
-    """检查 mineru-open-api CLI 是否可用。"""
-    try:
-        result = subprocess.run(
-            ["mineru-open-api", "--version"],
-            capture_output=True, text=True, timeout=5,
-        )
-        return result.returncode == 0
-    except (FileNotFoundError, subprocess.TimeoutExpired):
-        return False
-
-
-def _extract_mineru(
-    file_path: str, output_dir: str, mode: Optional[str] = None
-) -> Dict[str, Any]:
-    """mineru-open-api 引擎的提取流程。"""
-    if not _check_mineru_available():
-        raise RuntimeError(
-            "mineru-open-api 未安装或不在 PATH 中。\n"
-            "安装：https://mineru.net/ 或 pip install mineru-open-api"
-        )
-
-    # 选择模式
-    if mode is None:
-        size_mb = os.path.getsize(file_path) / (1024 * 1024) if not file_path.startswith("http") else 0
-        use_extract = size_mb > 10
-    else:
-        use_extract = mode == "extract"
-
-    mode_name = "extract" if use_extract else "flash-extract"
-    print(f"[mineru] 使用 {mode_name} 模式")
-
-    if file_path.startswith("http"):
-        cmd = ["mineru-open-api", "extract", file_path, "-o", output_dir, "-f", "md"]
-    elif use_extract:
-        cmd = ["mineru-open-api", "extract", file_path, "-o", output_dir, "-f", "md"]
-    else:
-        cmd = ["mineru-open-api", "flash-extract", file_path, "-o", output_dir]
-
-    try:
-        result = subprocess.run(cmd, capture_output=True, text=True, check=True, timeout=300)
-    except subprocess.CalledProcessError as e:
-        raise RuntimeError(f"mineru-open-api 执行失败:\n命令: {' '.join(cmd)}\n错误: {e.stderr}")
-    except subprocess.TimeoutExpired:
-        raise RuntimeError("mineru 提取超时（5分钟）")
-
-    # 查找输出文件
-    if file_path.startswith("http"):
-        base_name = "remote_document"
-    else:
-        base_name = Path(file_path).stem
-    md_file = os.path.join(output_dir, f"{base_name}.md")
-
-    if not os.path.exists(md_file):
-        md_files = list(Path(output_dir).glob("*.md"))
-        if md_files:
-            md_file = str(md_files[0])
-        else:
-            raise FileNotFoundError(
-                f"未找到输出文件，预期: {md_file}\nmineru 输出: {result.stdout}"
-            )
-
-    with open(md_file, "r", encoding="utf-8") as f:
-        text = f.read()
-
-    print(f"[mineru] 输出: {md_file}")
-    return {
-        "text": text,
-        "markdown_file": md_file,
-        "page_files": [md_file],
-        "metadata": {
-            "source": file_path,
-            "extractor": "mineru-open-api",
-            "mode": mode_name,
             "output_dir": output_dir,
         },
     }
@@ -291,9 +205,7 @@ def _extract_mineru(
 def extract_from_pdf(
     file_path: str,
     output_dir: Optional[str] = None,
-    engine: str = "paddleocr",
     timeout: int = DEFAULT_TIMEOUT,
-    mineru_mode: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     从PDF文件提取文本内容。
@@ -301,9 +213,7 @@ def extract_from_pdf(
     Args:
         file_path: PDF文件路径或HTTP URL
         output_dir: 输出目录（None = PDF同目录下 ocr_output/）
-        engine: 提取引擎，"paddleocr"（默认）或 "mineru"
         timeout: PaddleOCR 超时时间（秒）
-        mineru_mode: mineru 模式，"flash" 或 "extract"（None=自动）
 
     Returns:
         {
@@ -325,18 +235,12 @@ def extract_from_pdf(
             )
     output_dir = os.path.abspath(output_dir)
 
-    if engine == "paddleocr":
-        return _extract_paddleocr(file_path, output_dir, timeout)
-    elif engine == "mineru":
-        return _extract_mineru(file_path, output_dir, mineru_mode)
-    else:
-        raise ValueError(f"未知引擎: {engine}，可选: paddleocr, mineru")
+    return _extract_paddleocr(file_path, output_dir, timeout)
 
 
 def extract_from_arxiv(
     arxiv_url: str,
     output_dir: Optional[str] = None,
-    engine: str = "paddleocr",
     timeout: int = DEFAULT_TIMEOUT,
 ) -> Dict[str, Any]:
     """
@@ -345,7 +249,6 @@ def extract_from_arxiv(
     Args:
         arxiv_url: arXiv论文URL（abs/pdf 均可）
         output_dir: 输出目录
-        engine: 提取引擎
         timeout: 超时时间
 
     Returns:
@@ -358,7 +261,7 @@ def extract_from_arxiv(
         output_dir = os.path.join(os.getcwd(), f"arxiv_{arxiv_id}")
 
     print(f"处理arXiv论文: {arxiv_id}")
-    result = extract_from_pdf(pdf_url, output_dir, engine=engine, timeout=timeout)
+    result = extract_from_pdf(pdf_url, output_dir, timeout=timeout)
     result["arxiv_id"] = arxiv_id
     result["arxiv_url"] = arxiv_url
     result["metadata"]["arxiv_id"] = arxiv_id
@@ -386,35 +289,19 @@ def extract_arxiv_id(arxiv_url: str) -> str:
 def main():
     """命令行接口"""
     if len(sys.argv) < 2:
-        print("PDF文本提取工具 - 双引擎（PaddleOCR + mineru 备选）")
+        print("PDF文本提取工具 - PaddleOCR AI Studio API")
         print("")
         print("用法：")
         print("  PDF文件：      python extract_pdf.py <文件路径.pdf>")
-        print("  指定引擎：     python extract_pdf.py <文件路径.pdf> --engine <paddleocr|mineru>")
         print("  指定输出目录：  python extract_pdf.py <文件路径.pdf> --output <目录>")
         print("  arXiv URL：    python extract_pdf.py --arxiv <arXiv URL>")
         print("  HTTP文件：     python extract_pdf.py <http(s)://...>")
-        print("")
-        print("引擎：")
-        print("  paddleocr（默认）: PaddleOCR AI Studio API，依赖 requests")
-        print("  mineru:           mineru-open-api CLI，需预先安装")
         print("")
         print("环境变量：")
         print("  PADDLEOCR_TOKEN: PaddleOCR API Token（必须通过环境变量配置）")
         sys.exit(1)
 
     args = sys.argv[1:]
-    engine = "paddleocr"
-
-    if "--engine" in args:
-        ei = args.index("--engine")
-        if ei + 1 >= len(args):
-            print("错误：--engine 需要指定 paddleocr 或 mineru")
-            sys.exit(1)
-        engine = args[ei + 1]
-        if engine not in ("paddleocr", "mineru"):
-            print(f"错误：未知引擎 '{engine}'，可选: paddleocr, mineru")
-            sys.exit(1)
 
     if "--arxiv" in args:
         ai = args.index("--arxiv")
@@ -429,7 +316,7 @@ def main():
             output_dir = args[oi + 1]
 
         try:
-            result = extract_from_arxiv(arxiv_url, output_dir, engine=engine)
+            result = extract_from_arxiv(arxiv_url, output_dir)
             print(f"\narXiv论文提取成功!")
             print(f"  arXiv ID: {result['arxiv_id']}")
             print(f"  引擎: {result['metadata']['extractor']}")
@@ -447,7 +334,7 @@ def main():
             output_dir = args[oi + 1]
 
         try:
-            result = extract_from_pdf(file_path, output_dir, engine=engine)
+            result = extract_from_pdf(file_path, output_dir)
             print(f"\nPDF提取成功!")
             print(f"  引擎: {result['metadata']['extractor']}")
             print(f"  输出文件: {result['markdown_file']}")
