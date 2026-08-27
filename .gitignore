@@ -1,3 +1,8 @@
 # Python 字节码缓存（全仓各 skill 生效）
 __pycache__/
 *.pyc
+
+# pytest 缓存与临时/工作区目录
+.pytest_cache/
+tmp/
+customize-patent-disclosure-skill-workspace/
