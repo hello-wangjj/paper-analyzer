@@ -1,0 +1,3 @@
+# Python 字节码缓存（全仓各 skill 生效）
+__pycache__/
+*.pyc
