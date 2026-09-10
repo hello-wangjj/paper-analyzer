@@ -12,6 +12,15 @@
 
 按判断需要核对真正相关的工作，优先覆盖最近方法、竞争路线和会改变判断的替代解释。数量不是目标；短理论结果、新问题或缺乏直接前作时可以只有少量来源，但要明确记录检索范围和未找到的证据，不得用弱相关工作凑数。
 
+## 检索工具
+
+优先使用宿主环境的 WebSearch / WebFetch 工具；宿主未提供时，调用本机 **websearch MCP**：
+
+- `search_papers(query, limit, sources)`：聚合 arXiv / OpenAlex / Crossref / OpenReview（配置 `S2_API_KEY` 后自动含 Semantic Scholar），返回统一结构并已跨源去重——直接用于核对标题、作者、年份、venue 与链接
+- `search_web(query, max_results)`：通用 web 搜索，用于官方项目页、代码仓库与 benchmark 页面
+
+MCP 聚合结果不能替代打开原文：仍须按"核对与写入"的标准，只有打开并核对过的来源才能写入报告；MCP 不可用时回到宿主工具，两者都不可用时明确记录检索边界。
+
 ## 来源优先级
 
 学术结论只接受真实、可核验来源，优先级从高到低：

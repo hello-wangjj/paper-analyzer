@@ -1,6 +1,6 @@
 ---
 name: paper-analyzer
-version: 2.2.2
+version: 2.3.0
 description: 深度分析自动驾驶领域学术论文的可执行 skill。适用于单篇 PDF / arXiv / Markdown 论文的 reviewer-level 批判性解读、理论推导分析、实验审查、相关文献对比、理论质疑、复现评估，并生成基于 PaddlePaddle 3.2 的 Python 代码实现。当用户上传 PDF 论文、提供 arXiv 链接、上传 markdown 格式论文、粘贴论文内容、或要求分析/解读/实现/精读/审查论文时触发此技能。特别适用于目标检测、跟踪、传感器融合、多目标跟踪、雷达信号处理、深度学习在自动驾驶中的应用等方向。也适用于用户要求"reviewer-level 分析""批判性阅读""论文审稿""复现评估""代码实现"等场景。支持多种论文格式：PDF、Markdown（.md）、纯文本、arXiv 链接；自动适配理论、方法、系统、数据集、实证、综述等论文类型。也支持 UI 截图、论文 figure 等图片的多模态分析（按能力依次选择：主模型直接分析 / multimodal-vision 子智能体 / 默认图片解析工具 / 降级到 caption 并标注未核验）。
 ---
 
@@ -176,7 +176,7 @@ Markdown 用 `scripts/extract_markdown.py` 解析或直接读取；粘贴文本�
 
 ### 第 4 章：文献定位
 
-读取 `references/literature_search.md`。按论文实际问题核对最接近工作、竞争路线和必要的反对或替代证据；不设统一篇数配额，只使用已打开并核对的论文或官方页面。**严禁虚构论文、作者或结论**；未找到相关文献时明确说明。区分"支持""平行相关"和"反对"。
+读取 `references/literature_search.md`。按论文实际问题核对最接近工作、竞争路线和必要的反对或替代证据；不设统一篇数配额，只使用已打开并核对的论文或官方页面。宿主无 WebSearch 工具时改用本机 websearch MCP（`search_papers` / `search_web`，见 references/literature_search.md）。**严禁虚构论文、作者或结论**；未找到相关文献时明确说明。区分"支持""平行相关"和"反对"。
 
 ### 第 5 章：严肃反驳与系统性质疑
 
