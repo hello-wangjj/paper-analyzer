@@ -45,9 +45,9 @@
     },
     {
       "id": 7,
-      "name": "multimodal-figure-vision-delegation",
+      "name": "multimodal-image-capability-path",
       "prompt": "分析这篇论文的 PDF，另外论文里的 Fig.3 架构图和 Fig.5 定性对比结果图我想让你看仔细点，解释下模块怎么连接的、可视化对比到底好在哪",
-      "expected_output": "多模态委派测试。报告生成过程中遇到需要看图的环节（图注解释、图表证据核对、定性对比评估）时，应委派 multimodal-vision 子智能体，委派 prompt 带图片路径+具体问题（如'描述 Fig.3 模块关系与信息流'），而非泛泛'分析这张图'。子智能体返回的图片理解标注为报告推断，与 caption/正文引用交叉核对后才用于图注或 Claim 判断。图片存放产物目录 assets/ 并相对路径引用。",
+      "expected_output": "多模态能力路径测试。遇到需要看图的环节时，先确定多模态能力来源：会话已知则直接判断，无法确定时询问使用人（主模型是否多模态？是否有 multimodal-vision 子智能体？）。主模型多模态→直接读图；非多模态但有 multimodal-vision→委派（prompt 带图片路径+具体问题，如'描述 Fig.3 模块关系与信息流'，禁止泛泛'分析这张图'）；都没有→尝试环境默认图片解析工具（如 analyze_image/Read 读图）；仍不行才告知使用人无法核验，图注只基于 caption/正文并标注'图片内容未直接核验'。任何路径的图片理解均按报告推断对待，与 caption/正文交叉核对后才用于图注或 Claim 判断。图片存放产物目录 assets/ 并相对路径引用。",
       "files": []
     }
   ]
