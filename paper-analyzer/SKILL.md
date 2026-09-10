@@ -1,6 +1,6 @@
 ---
 name: paper-analyzer
-version: 2.2.1
+version: 2.2.2
 description: 深度分析自动驾驶领域学术论文的可执行 skill。适用于单篇 PDF / arXiv / Markdown 论文的 reviewer-level 批判性解读、理论推导分析、实验审查、相关文献对比、理论质疑、复现评估，并生成基于 PaddlePaddle 3.2 的 Python 代码实现。当用户上传 PDF 论文、提供 arXiv 链接、上传 markdown 格式论文、粘贴论文内容、或要求分析/解读/实现/精读/审查论文时触发此技能。特别适用于目标检测、跟踪、传感器融合、多目标跟踪、雷达信号处理、深度学习在自动驾驶中的应用等方向。也适用于用户要求"reviewer-level 分析""批判性阅读""论文审稿""复现评估""代码实现"等场景。支持多种论文格式：PDF、Markdown（.md）、纯文本、arXiv 链接；自动适配理论、方法、系统、数据集、实证、综述等论文类型。也支持 UI 截图、论文 figure 等图片的多模态分析（按能力依次选择：主模型直接分析 / multimodal-vision 子智能体 / 默认图片解析工具 / 降级到 caption 并标注未核验）。
 ---
 
@@ -26,14 +26,23 @@ description: 深度分析自动驾驶领域学术论文的可执行 skill。适�
 
 ### 2.1 PDF 文件
 
-使用 `scripts/extract_pdf.py` 处理（PaddleOCR AI Studio API，PaddleOCR-VL-1.6，依赖 `requests`）：
+使用 `scripts/extract_pdf.py` 处理（PaddleOCR AI Studio API，PaddleOCR-VL-1.6，依赖 `requests`）。
+
+**Python 环境（先询问使用人，uv 优先，不得静默落到系统默认 Python）**：运行本技能任何 Python 脚本前：
+
+1. **探测候选**：当前目录及祖先目录的 uv 项目环境（`pyproject.toml` / `.venv`）；使用人此前提及的其他 uv 项目环境；`uv run --with requests` 隔离环境；系统 python。
+2. **征询选择**：用 AskUserQuestion 列出探测到的候选请使用人选定，标注推荐项——uv 隔离环境（任意目录可用、不污染已有环境）。同一会话只需询问一次，之后沿用该选择。
+3. **按选择执行**；uv 不可用才回退系统 python，且先确认 `requests` 已安装。
+4. 禁止为此全局 `pip install` 或专门新建虚拟环境。
+
+以下示例为推荐默认（uv 隔离环境）；实际执行以使用人选定的环境为准：
 ```bash
 # 本地 PDF
-python scripts/extract_pdf.py <PDF路径>
+uv run --with requests python scripts/extract_pdf.py <PDF路径>
 # arXiv
-python scripts/extract_pdf.py --arxiv https://arxiv.org/abs/<ID>
+uv run --with requests python scripts/extract_pdf.py --arxiv https://arxiv.org/abs/<ID>
 # HTTP 链接
-python scripts/extract_pdf.py <https://...pdf>
+uv run --with requests python scripts/extract_pdf.py <https://...pdf>
 ```
 
 **统一接口**：`extract_from_pdf(path)` 和 `extract_from_arxiv(url)`。

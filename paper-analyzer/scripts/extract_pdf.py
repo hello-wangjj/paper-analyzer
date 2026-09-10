@@ -7,7 +7,8 @@ PDF文本提取工具 - PaddleOCR AI Studio API
 引擎：PaddleOCR-VL-1.6 jobs HTTP API，依赖 requests
 
 依赖：
-  pip install requests
+  requests。推荐 uv 运行：uv run --with requests python extract_pdf.py <参数>
+  （任意目录可用，不依赖系统环境）；或自行 pip install requests
 """
 
 import json
