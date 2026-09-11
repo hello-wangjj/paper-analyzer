@@ -18,8 +18,17 @@
 
 - `search_papers(query, limit, sources)`：聚合 arXiv / OpenAlex / Crossref / OpenReview（配置 `S2_API_KEY` 后自动含 Semantic Scholar），返回统一结构并已跨源去重——直接用于核对标题、作者、年份、venue 与链接
 - `search_web(query, max_results)`：通用 web 搜索，用于官方项目页、代码仓库与 benchmark 页面
+- `fetch_url(url, max_length, start_index, raw, fallback)`：**打开具体页面**取回正文 markdown（导航、广告、页脚已去），用于下一步的核对；JSON / 纯文本 / XML 原样返回
 
-MCP 聚合结果不能替代打开原文：仍须按"核对与写入"的标准，只有打开并核对过的来源才能写入报告；MCP 不可用时回到宿主工具，两者都不可用时明确记录检索边界。
+`fetch_url` 的返回带 `length`、`truncated`、`next_start_index`：长文先取一段，
+需要时用 `start_index=next_start_index` 续读，不要一次把整页读进来。`via` 为
+`"jina"` 表示该页经 r.jina.ai 兜底取回（多为 JS 渲染页），内容按同一标准核对；
+`note` 说明了兜底原因。`error` 里出现"internal address"是本机/内网地址被拒的
+预期行为，不要绕道尝试。PDF 只报提示不解析，改引 `oa_pdf_url` 或离线阅读。
+
+MCP 聚合结果不能替代打开原文：仍须按"核对与写入"的标准，只有用 `fetch_url`
+（或宿主 WebFetch）打开并核对过的来源才能写入报告；MCP 不可用时回到宿主工具，
+两者都不可用时明确记录检索边界。
 
 ## 来源优先级
 

@@ -2,6 +2,10 @@
 
 技能版本记录（倒序）。升级技能时在 frontmatter `version` 与此处同步登记；报告模板 0.6 的"技能版本"行取 frontmatter 值。
 
+## v2.3.1 (2026-09-11)
+
+- 文献核对链路补全：websearch MCP 增 `fetch_url`（打开具体页面取正文 markdown，分页续读；JSON/纯文本直返；PDF 只报提示）；「打开并核对后才能写入报告」现可全程走本机 MCP，内网地址拒绝为预期行为
+
 ## v2.3.0 (2026-09-10)
 
 - 文献检索不依赖宿主：宿主无 WebSearch 工具时改用本机 websearch MCP（`search_papers` 聚合 arXiv/OpenAlex/Crossref/OpenReview + `search_web` 通用兜底）；MCP 聚合结果仍须打开核对后才能写入报告
