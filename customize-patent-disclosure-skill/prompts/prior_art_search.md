@@ -24,7 +24,7 @@
 
    - **脚本不做**自动分词或自动拆长中文；若确需**整句一次** AND 检索，改用 **`cnipa_epub_crawler.py`** 单传一句。
 
-5. **执行方式**（Step 5 在读完本文件后**先探测，再检索**）：
+5. **执行方式**（Step 5 在读完本文件后**先探测，再检索**；首次运行 Python 前按 `SKILL.md`「环境与约定 · Python 执行环境」**询问用户 uv 环境选择**并沿用，勿静默 `pip install`）：
 
    ```bash
    python ${CLAUDE_SKILL_DIR}/tools/browser.py --probe

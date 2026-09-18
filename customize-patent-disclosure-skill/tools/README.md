@@ -2,6 +2,8 @@
 
 本目录存放**可重复执行的辅助脚本**。技能主流程以 `SKILL.md` 与 `prompts/` 为准；本目录侧重格式转换等可执行工具。
 
+**Python 解释器选择（先问）**：首次运行本目录任何脚本前，按 `SKILL.md`「环境与约定 · Python 执行环境」询问用户是否有现成 uv 环境（uv 项目 / `uv run --with <依赖>` 或 `--with-requirements requirements.txt` 隔离 / 系统 python），选定后同会话沿用；**禁止**静默落系统默认 python、**禁止**全局 `pip install`。下文各节的 `pip install -r requirements.txt` / `python3 …` 仅为依赖清单与命令示意，实际解释器以用户选定为准。
+
 ## 国知局公布公告检索（epub.cnipa.gov.cn，Step 5 查新优先）
 
 | 脚本 | 作用 |

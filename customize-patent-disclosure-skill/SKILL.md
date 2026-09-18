@@ -1,7 +1,7 @@
 ---
 name: customize-patent-disclosure-skill
 description: "面向所内《专利技术交底书》模板的专利挖掘与交底书生成全流程：扫描项目文档挖掘专利点并输出含轻量相似专利初筛的资产清单（用户取舍确认后才成文）、讨论融合、对齐所内 docx 模板（封面元数据表+一名称/二技术领域/三背景技术3.1-3.3/四创新点4.1-4.5含代替方案与逻辑论证/五实施方式/六附图）生成技术交底书、联网查新（按发明/实用新型类型过滤）、公式范式计划与可算性校验、版本化目录交付（vN-说明-时间戳+版本索引）、多件交付附专利簇通俗清单、生成后自检含逻辑闭环/标题贯穿与公式参数一致性。适用于需要按真实交底书模板格式产出的场景；图片类多模态理解与附图核对经 multimodal-vision 子智能体。| Patent mining triage gate + disclosure drafting aligned to an in-house docx template, typed prior-art search, formula-paradigm planning, versioned delivery, and consistency self-check."
-version: "2.1.1"
+version: "2.1.2"
 user-invocable: true
 argument-hint: "[可选：项目路径或技术主题关键词]"
 allowed-tools: Read, Write, Edit, Grep, Glob, WebSearch, Bash
@@ -14,6 +14,7 @@ allowed-tools: Read, Write, Edit, Grep, Glob, WebSearch, Bash
 ## 环境与约定
 
 - **语言**：默认与用户语种一致；专利与法律术语采用行业常用表述。
+- **Python 执行环境（先问，勿自作主张）**：本技能多处需运行 Python 脚本（Office 转换 / 国知局查新 / mermaid 渲染 / Word 导出 / 公式校验）。**首次执行前须询问用户**是否有现成的 uv 环境可用，候选：①用户指定的 uv 项目环境（`uv run --project <路径> …`）；②`uv run --with <依赖>` / `--with-requirements requirements.txt` 隔离环境（**推荐**，免污染）；③系统 `python`（用户明确同意才用）。用户选定后**同一会话/同一案件沿用**，不再重复询问。**禁止**静默落系统默认 python、**禁止**全局 `pip install`。
 - **脚本判读（尤其 Windows）**：stderr 有字 **不等于** 失败。以 **退出码 0** 和机读前缀为准：`EPUB_HITS_JSON:` / `EPUB_MERGE:` / `BROWSER:`、`MERMAID: ok=`、`DOCX: ok=1`、`MATH:`、`omml_text_fallback=`。PowerShell 可能把 stderr 标成 `NativeCommandError` 或乱码；**禁止**因此重跑安装、认定 Word 未生成、或把查新降级 WebSearch。勿用 `2>&1` 把 JSON 混进错误流。
 - **专利类型**：封面「申报类型」未显式指定时**默认发明**（`invention`）；材料明显更偏产品形状/构造改进时在汇总或预览阶段**反问**是否改实用新型（见 `intake.md`）。查新 `--type` 与之一致。
 - **图片等多模态任务（经 multimodal-vision 子智能体）**：凡需「看图」的场景——Step 2 理解关键图片材料（架构图/流程图/截图）、Step 8 定稿后核对 mermaid PNG 附图、检查图片内敏感信息——委派 **`multimodal-vision`** 子智能体（Agent 工具，`subagent_type: multimodal-vision`）：prompt 给足**图片路径 + 具体问题**（勿泛泛「分析这张图」）；子智能体返回的属**报告推断**，涉及专利点/技术事实的结论须与文本材料**交叉核对**。当前环境无该子智能体时，回退为主代理直接读图。
@@ -35,7 +36,7 @@ allowed-tools: Read, Write, Edit, Grep, Glob, WebSearch, Bash
 
 按任务选用能力；具体工具名称以当前 Agent 环境为准。
 
-若扫描范围内含 **Word（.docx）** 或 **PowerPoint（.pptx）**，须在 Step 2 纳入阅读前用本仓库 **`docx_to_md.py`** / **`pptx_to_md.py`** 转为 Markdown；依赖 **`pip install -r requirements.txt`**，命令与说明见下表对应行。
+若扫描范围内含 **Word（.docx）** 或 **PowerPoint（.pptx）**，须在 Step 2 纳入阅读前用本仓库 **`docx_to_md.py`** / **`pptx_to_md.py`** 转为 Markdown；依赖与解释器选择见上文「环境与约定 · Python 执行环境」（先问 uv 环境，勿静默 `pip install`），命令与说明见下表对应行。
 
 ### 常见任务与建议方式
 
@@ -106,6 +107,7 @@ allowed-tools: Read, Write, Edit, Grep, Glob, WebSearch, Bash
 
 ```
 □ 已按步骤 Read 对应 prompts；Step 2 若目录含 Office，已执行 docx_to_md / pptx_to_md 并读了产出 `.md`
+□ 首次运行 Python 脚本前已询问用户 uv 环境选择（uv 项目 / uv run --with 隔离 / 系统 python），选定后同会话沿用；未静默落系统 python、未全局 pip install
 □ Step 3–4 已先输出专利点资产清单：含轻量相似专利初筛结果、四类分类（建议申请/可合并/暂不适合/商业秘密）、评分、理由与推荐组合；已获得用户确认要写的点（除非用户明确跳过清单并已说明）；商业秘密点未写入任何交底正文
 □ 专利类型未指定时已默认发明；材料偏实用新型已按需反问；查新已带与封面一致的 --type
 □ 查新完成且写入 3.1/3.3 与区别论述（符合 `prior_art_search.md`：**优先** `tools/cnipa_epub_search.py`，**先 browser.py --probe、一次进程多词共用浏览器、按 pub_number 合并**；**`abstract` 必用且已充分理解后再概括**；国知局命中项照抄 JSON `link`；仅退出码非 0/无 JSON/空数组才降级 WebSearch）；未因 stderr/乱码误判失败

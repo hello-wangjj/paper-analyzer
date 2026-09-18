@@ -38,7 +38,7 @@
 Agent **不得**因「只能舒适读取文本」而**遗漏**项目内的 Word / PPT：**必须先转为 Markdown 再纳入扫描**，不能只扫 `.md` 与源码。
 
 1. **发现**：在扫描目录内 **`Glob` 或列举** `*.docx`、`*.pptx`（含子目录，如 `docs/sample_*.docx`）。
-2. **转换（本仓库脚本）**：对每个文件执行（路径按实际替换；`${CLAUDE_SKILL_DIR}` 为技能根）：
+2. **转换（本仓库脚本）**：对每个文件执行（路径按实际替换；`${CLAUDE_SKILL_DIR}` 为技能根）。**执行前**：首次运行 Python 按 `SKILL.md`「环境与约定 · Python 执行环境」**询问用户 uv 环境选择**（uv 项目 / `uv run --with` 隔离 / 系统 python），选定后沿用，勿静默 `pip install`：
 
    ```bash
    python3 ${CLAUDE_SKILL_DIR}/tools/docx_to_md.py -i "<路径>/<名>.docx" -o "<同目录或 docs>/<名>.md"
