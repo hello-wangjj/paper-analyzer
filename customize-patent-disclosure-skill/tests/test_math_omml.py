@@ -55,6 +55,33 @@ class MathToOmmlTests(unittest.TestCase):
         )
         self.assertIsNotNone(try_latex_to_omml(latex, display=True))
 
+    def test_script_children_map_sub_sup(self):
+        """回归（2026-10-15）：sSup 上标曾误写入 m:sub，被 Word 按 schema 丢弃。
+
+        v7 交底书 16 处 sSup 有 15 处上标丢失；sSub / sSubSup 一并钉死子元素次序。
+        """
+        from lxml import etree
+        from math_to_omml import latex_to_omml
+
+        def kids_of(latex, kind):
+            el = latex_to_omml(latex, display=True)
+            match = [e for e in el.iter() if etree.QName(e).localname == kind]
+            self.assertEqual(len(match), 1, f"{latex} 应产出恰好 1 个 {kind}")
+            return [etree.QName(c).localname for c in match[0]], "".join(
+                match[0].itertext()
+            )
+
+        kids, text = kids_of(r"x^2", "sSup")
+        self.assertEqual(kids, ["e", "sup"])
+        self.assertIn("2", text)
+        kids, text = kids_of(r"x_1", "sSub")
+        self.assertEqual(kids, ["e", "sub"])
+        self.assertIn("1", text)
+        kids, text = kids_of(r"x_1^2", "sSubSup")
+        self.assertEqual(kids, ["e", "sub", "sup"])
+        self.assertIn("1", text)
+        self.assertIn("2", text)
+
 
 class MdToDocxOmmlTests(unittest.TestCase):
     @classmethod

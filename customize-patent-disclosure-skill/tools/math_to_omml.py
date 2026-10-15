@@ -66,20 +66,30 @@ def _append_children(target, source) -> None:
 def _script(target, node, kind: str) -> None:
     result = _element(kind)
     expression = _element("e")
-    sub = _element("sub")
-    sup = _element("sup")
     children = list(node)
     if children:
         _append_mathml(expression, children[0])
-    if len(children) > 1:
-        _append_mathml(sub, children[1])
-    if len(children) > 2:
-        _append_mathml(sup, children[2])
     result.append(expression)
-    if kind in {"sSub", "sSubSup"}:
+    if kind == "sSub":
+        sub = _element("sub")
+        if len(children) > 1:
+            _append_mathml(sub, children[1])
         result.append(sub)
-    if kind in {"sSup", "sSubSup"}:
-        result.append(sup if kind == "sSubSup" else sub)
+    elif kind == "sSup":
+        # MathML msup/mover 仅两个子节点：基 + 上标；上标必须写入 m:sup，
+        # 误写入 m:sub 会被 Word 丢弃（2026-10-15 修复：v7 交底书 16 处 sSup 有 15 处畸形）
+        sup = _element("sup")
+        if len(children) > 1:
+            _append_mathml(sup, children[1])
+        result.append(sup)
+    else:  # sSubSup：msubsup/munderover 第 2 子为下标、第 3 子为上标
+        sub = _element("sub")
+        sup = _element("sup")
+        if len(children) > 1:
+            _append_mathml(sub, children[1])
+        if len(children) > 2:
+            _append_mathml(sup, children[2])
+        result.extend((sub, sup))
     target.append(result)
 
 

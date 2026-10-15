@@ -1,7 +1,7 @@
 ---
 name: customize-patent-disclosure-skill
 description: "面向所内《专利技术交底书》模板的专利挖掘与交底书生成全流程：扫描项目文档挖掘专利点并输出含轻量相似专利初筛的资产清单（用户取舍确认后才成文）、讨论融合、对齐所内 docx 模板（封面元数据表+一名称/二技术领域/三背景技术3.1-3.3/四创新点4.1-4.5含代替方案与逻辑论证/五实施方式/六附图）生成技术交底书、联网查新（按发明/实用新型类型过滤）、公式范式计划与可算性校验、版本化目录交付（vN-说明-时间戳+版本索引）、多件交付附专利簇通俗清单、生成后自检含逻辑闭环/标题贯穿与公式参数一致性。适用于需要按真实交底书模板格式产出的场景；图片类多模态理解与附图核对经 multimodal-vision 子智能体。| Patent mining triage gate + disclosure drafting aligned to an in-house docx template, typed prior-art search, formula-paradigm planning, versioned delivery, and consistency self-check."
-version: "2.1.2"
+version: "2.1.3"
 user-invocable: true
 argument-hint: "[可选：项目路径或技术主题关键词]"
 allowed-tools: Read, Write, Edit, Grep, Glob, WebSearch, Bash
