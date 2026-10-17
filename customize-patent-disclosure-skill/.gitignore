@@ -9,6 +9,7 @@ tmp/
 
 # 国知局抓取结果缓存（tools/）
 tools/_last_result*.html
+tools/_last_home.html
 
 # Python / tools
 tools/node_modules/

@@ -8,9 +8,11 @@
 
 | 脚本 | 作用 |
 |------|------|
-| **`cnipa_epub_search.py`** | **（Step 5 优先）** 一步：拉取 + 解析，**不写结果页 HTML 落盘**；支持 **`--type invention\|utility_model\|design\|all`**（默认 `all`，对应公布站首页勾选，见 `patent_type.py` 与 `references/patent_type_search.yaml`）。**Agent 一次进程传入全部检索单位**（多个 argv），脚本在**同一浏览器**内一词一查再按 `pub_number` 去重合并（stderr 可见 `EPUB_MERGE:`）；**stdout 仅一行** `EPUB_HITS_JSON:`；stderr 上 `EPUB_*` 为 **ASCII**；**stderr 有字 ≠ 失败**，以退出码与 stdout JSON 为准。 |
-| **`cnipa_epub_crawler.py`** | 仅 Playwright 拉取并**默认保存**结果页 HTML；stdout 亦含 **`EPUB_HITS_JSON:`**。 |
-| **`cnipa_epub_parse.py`** | 仅解析已保存的 HTML：`python tools/cnipa_epub_parse.py path/to/_last_result_xxx.html`；字段含标题、公开号、链接、**`abstract`**（若有）。 |
+| **`cnipa_epub_search.py`** | **（Step 5 优先）** 一步：拉取 + 解析，**不写结果页 HTML 落盘**；支持 **`--type invention\|utility_model\|design\|all`**（默认 `all`，对应公布站首页勾选，见 `patent_type.py` 与 `references/patent_type_search.yaml`）与**第二轮 `--class`（`--ipc`/`--loc` 同义）高级查询**（默认一条命令 1 分类号 × 1 名称词，多传截断并在 stderr 提示）。**Agent 一次进程传入全部检索单位**（首页上限 `home_max_terms`=4 词，超过拒绝），脚本在**同一浏览器**内**一词一页**（公布模式、站点「每页10条」、取第一页）再按 `pub_number` 去重合并（stderr 可见 `EPUB_MERGE:`）；JSON 含 `abstract`、`ipc_codes`/`loc_codes`；**stdout 仅一行** `EPUB_HITS_JSON:`；stderr 上 `EPUB_*` / `CNIPA_EPUB_ERROR:` 为 **ASCII**（`stage=goto\|gate\|submit` + `hint=` 分流失败）；**stderr 有字 ≠ 失败**，以退出码与 stdout JSON 为准。 |
+| **`cnipa_epub_crawler.py`** | Playwright 拉取并**默认保存**结果页 HTML；stdout 亦含 **`EPUB_HITS_JSON:`**。默认整页导航路径（`EPUB_FAST_FETCH=1` 才走 fetch 快路径，仅排查用）。 |
+| **`cnipa_epub_nav.py`** | 整页导航实现（填框 → 提交 → 站点「每页N条」下拉切 10 → 等 DOM）；UA 用本机浏览器自己的（`browser.py browser_user_agent`，仅去 `HeadlessChrome` 标记），由 crawler/search 复用。 |
+| **`cnipa_epub_wait.py` / `cnipa_epub_wait.yaml`** | 各跳等待与两轮收口上限（`goto_timeout_ms` / `gate_poll_sec` / `submit_timeout_ms` / `advanced_max_*` / `home_max_terms` / `stop_on_first_nav_failure`）；改 yaml 即可微调，环境变量 `EPUB_WAIT_YAML` 指定其它路径。 |
+| **`cnipa_epub_parse.py`** | 仅解析已保存的 HTML：`python tools/cnipa_epub_parse.py path/to/_last_result_xxx.html`；字段含标题、公开号、链接、**`abstract`**、**`ipc_codes`/`loc_codes`**（若有）。 |
 
 依赖：`pip install -r requirements.txt`（含 playwright）。**检索前先探测浏览器**：`python tools/browser.py --probe`——有系统 Chrome/Edge（`ok=true`）**直接检索，勿执行** `python -m playwright install chromium`；仅当本机无系统浏览器且自带 Chromium 缺失时才装一次。环境变量见各脚本文件头。默认结果 HTML 落在 **`tools/_last_result_*.html`**（已 `.gitignore`）。
 

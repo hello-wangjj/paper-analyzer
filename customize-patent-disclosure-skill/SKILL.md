@@ -1,7 +1,7 @@
 ---
 name: customize-patent-disclosure-skill
 description: "面向所内《专利技术交底书》模板的专利挖掘与交底书生成全流程：扫描项目文档挖掘专利点并输出含轻量相似专利初筛的资产清单（用户取舍确认后才成文）、讨论融合、对齐所内 docx 模板（封面元数据表+一名称/二技术领域/三背景技术3.1-3.3/四创新点4.1-4.5含代替方案与逻辑论证/五实施方式/六附图）生成技术交底书、联网查新（按发明/实用新型类型过滤）、公式范式计划与可算性校验、版本化目录交付（vN-说明-时间戳+版本索引）、多件交付附专利簇通俗清单、生成后自检含逻辑闭环/标题贯穿与公式参数一致性。适用于需要按真实交底书模板格式产出的场景；图片类多模态理解与附图核对经 multimodal-vision 子智能体。| Patent mining triage gate + disclosure drafting aligned to an in-house docx template, typed prior-art search, formula-paradigm planning, versioned delivery, and consistency self-check."
-version: "2.1.3"
+version: "2.2.0"
 user-invocable: true
 argument-hint: "[可选：项目路径或技术主题关键词]"
 allowed-tools: Read, Write, Edit, Grep, Glob, WebSearch, Bash
@@ -48,7 +48,7 @@ allowed-tools: Read, Write, Edit, Grep, Glob, WebSearch, Bash
 | PowerPoint（.pptx）→ Markdown + 抽取图片（扫描前） | `Bash` → `python3 ${CLAUDE_SKILL_DIR}/tools/pptx_to_md.py --input {path}.pptx --output {dir}/{name}.md`；默认 `{name}_media/`；需 `pip install -r requirements.txt`（含 python-pptx）；**旧版 .ppt 不支持**，请先另存为 `.pptx`；图表/SmartArt 等若未以图片形状嵌入则可能仅能从备注或另行导出补全 |
 | 罗列目录、按名找文件 | 目录列举 / 按文件名搜索 |
 | 轻量相似专利初筛（Step 3–4） | 执行前 **`Read`** `prompts/patent_points_analyzer.md`。优先 Google Patents + WebSearch 搜每个拟申请候选点的 1–3 组关键词；网络不可用时在清单中标注「轻量检索未完成，不作为最终可申请结论」 |
-| 联网查新（Step 5） | 执行前 **`Read`** `prompts/prior_art_search.md`。**中国专利公布公告**：**先探测** `python tools/browser.py --probe`（系统 Chrome/Edge 可用即**禁止** `playwright install chromium`），再优先 **`Bash`** 运行 `cnipa_epub_search.py --type invention|utility_model`（类型与封面一致）；**须在生成命令前**归纳 **2～8 个相关度高的语义块**；**一次进程传入全部词块**（脚本同一浏览器内一词一查、按 `pub_number` 合并，stderr `EPUB_MERGE:`）；单次超时才拆至多两批。一步拉取+解析、**不写 HTML 落盘**；依赖根目录 `requirements.txt`。**`abstract` 规定必用**同该 prompt。需整句一次 AND 或保存 HTML 时用 `cnipa_epub_crawler.py`；异常或无果再 **WebSearch**（仅退出码非 0 / 无 JSON / 空数组才降级）。检索结论分流写入 **3.1 现有技术** 与 **3.3 业内尝试** |
+| 联网查新（Step 5） | 执行前 **`Read`** `prompts/prior_art_search.md`。**中国专利公布公告**：**先探测** `python tools/browser.py --probe`（系统 Chrome/Edge 可用即**禁止** `playwright install chromium`），再优先 **`Bash`** 运行 `cnipa_epub_search.py --type invention|utility_model`（类型与封面一致）；**须在生成命令前**归纳 **3～4 个相关度高的手段短语**（首页上限 4 词，超限拒绝）；**一次进程传入全部词块**（脚本同一浏览器内一词一页、按 `pub_number` 合并，stderr `EPUB_MERGE:`）；单次超时才拆至多两批。第一轮后按 JSON `ipc_codes`/`loc_codes` 抽 1～3 个分类号做**第二轮 `--class` 邻域收口**（一条命令 1 号 × 1 词），再对照 `abstract` **精排打分取 Top 6～8** 写 3.1（`CNIPA_EPUB_ERROR:` 的 `stage`/`hint` 分流失败：`keep_round1` 保留第一轮不降级）。一步拉取+解析、**不写 HTML 落盘**；依赖根目录 `requirements.txt`。**`abstract` 规定必用**同该 prompt。需整句一次 AND 或保存 HTML 时用 `cnipa_epub_crawler.py`；异常或无果再 **WebSearch**（仅第一轮退出码非 0 `skip_epub` / 无 JSON / 空数组且回补无果才降级）。检索结论分流写入 **3.1 现有技术** 与 **3.3 业内尝试** |
 | 图片理解 / 视觉核对（多模态任务） | 委派 **multimodal-vision** 子智能体（Agent 工具，`subagent_type: multimodal-vision`），给图片路径 + 具体问题：Step 2 关键图片（「这是方案架构图，提取模块名、连接关系与数据流」）；Step 8 附图 PNG（「核对流程图 PNG：S1—Sn 步骤号是否在可见标签、节点名是否为标题领域词、有无中文乱码/缺字」）；图片脱敏（「识别图中公司名/产品名/敏感数值」）。结论与文本交叉核对；无该子智能体时回退主代理直接读图 |
 | 公式范式计划与校验（Step 7 含公式时） | 成文前 **`Read`** `references/formulas/paradigms.yaml`（或 `python tools/formula_paradigms.py list`），在案件目录写 **`formula_plan.yaml`**（合同 `references/schemas/formula_plan.schema.yaml`），`python tools/check_formula_plan.py -i …/formula_plan.yaml --eval` 通过后才写 4.2.4；见 `disclosure_builder.md` §7.7 |
 | 交底书定稿交付（**须同时** .md + .docx） | **4.2.1 系统框图**与 **4.2.3 流程图**均用 fenced ``mermaid``（**Playwright 渲染，免 Node/mmdc**），**不要** ASCII 文字流程图/框图。定稿执行 **`tools/mermaid_render.py`**：mermaid 转 PNG（失败块保留围栏）后默认生成同名 **.docx**；PNG 文件名带时间戳防止版本间覆盖。**公式处理**：`md_to_docx.py` 优先经 `math_to_omml.py` 把 LaTeX 转为 **Word 原生 OMML 公式**（可编辑、矢量清晰），失败保留原文；**默认不装 matplotlib**，stderr 出现 `omml_text_fallback=` 时按 `disclosure_builder.md`「OMML 失败后的公式 PNG」在交付末尾反问一次。若 Word 失败，按 stderr 提示手动运行 **`md_to_docx.py`**。详见 **`tools/README.md`** |
@@ -110,7 +110,7 @@ allowed-tools: Read, Write, Edit, Grep, Glob, WebSearch, Bash
 □ 首次运行 Python 脚本前已询问用户 uv 环境选择（uv 项目 / uv run --with 隔离 / 系统 python），选定后同会话沿用；未静默落系统 python、未全局 pip install
 □ Step 3–4 已先输出专利点资产清单：含轻量相似专利初筛结果、四类分类（建议申请/可合并/暂不适合/商业秘密）、评分、理由与推荐组合；已获得用户确认要写的点（除非用户明确跳过清单并已说明）；商业秘密点未写入任何交底正文
 □ 专利类型未指定时已默认发明；材料偏实用新型已按需反问；查新已带与封面一致的 --type
-□ 查新完成且写入 3.1/3.3 与区别论述（符合 `prior_art_search.md`：**优先** `tools/cnipa_epub_search.py`，**先 browser.py --probe、一次进程多词共用浏览器、按 pub_number 合并**；**`abstract` 必用且已充分理解后再概括**；国知局命中项照抄 JSON `link`；仅退出码非 0/无 JSON/空数组才降级 WebSearch）；未因 stderr/乱码误判失败
+□ 查新完成且写入 3.1/3.3 与区别论述（符合 `prior_art_search.md`：**优先** `tools/cnipa_epub_search.py`，**先 browser.py --probe、一次进程 3～4 词共用浏览器、一词一页、按 pub_number 合并**；第二轮 `--class` 收口 + `abstract` 精排打分取 Top 6～8，3.1 只写精排池；**`abstract` 必用且已充分理解后再概括**；国知局命中项照抄 JSON `link`；仅第一轮失败（`skip_epub`/无 JSON/空数组且回补无果）才降级 WebSearch，第二轮失败保留第一轮不降级）；未因 stderr/乱码误判失败
 □ 除用户明确跳过外，完成摘要预览
 □ 交付前已 Read `versioned_output.md`；产物已写入 `vN-简短说明-时间戳/` 版本目录，根目录无新增平铺定稿文件，`版本索引.md` 已创建/更新
 □ 结构对齐 docx 模板：封面表齐全（敏感字段 [待填写]、申报类型与查新 --type 一致）、一~六章齐全（含二技术领域/3.3 业内尝试/4.3 代替方案/4.5 逻辑论证/六附图）、名称≤25字、3.2≥100/3.3≥100/4.2≥200/4.5≥100字

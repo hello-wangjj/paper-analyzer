@@ -402,8 +402,15 @@ def _maybe_render_math_md(md_text: str, base_dir: Path) -> str:
 
 
 def _add_math_fallback_block(doc: Document, lines: list[str]) -> None:
-    """未渲染成功的 ``$$ ... $$`` 以等宽原文写入 Word。"""
+    """未渲染成功的块级公式以等宽原文写入 Word。
+
+    原文已是 ``\\[ ... \\]`` 时按原样写出；否则补回 ``$$`` 包裹，
+    避免出现 ``$$ \\[ … \\] $$`` 这类双重定界符。
+    """
     body = [ln.rstrip("\n") for ln in lines]
+    if body and body[0].strip() == "\\[":
+        _add_code_block(doc, body)
+        return
     _add_code_block(doc, ["$$", *body, "$$"])
 
 
@@ -1187,12 +1194,16 @@ def convert_md_to_docx(
             )
             continue
 
-        # 单行 $$ ... $$
+        # 单行 $$ ... $$ 或 \[ ... \]
         strip = line.strip()
+        single_latex = None
         if strip.startswith("$$") and strip.endswith("$$") and len(strip) > 4:
+            single_latex = strip[2:-2].strip()
+        elif strip.startswith("\\[") and strip.endswith("\\]") and len(strip) > 4:
+            single_latex = strip[2:-2].strip()
+        if single_latex is not None:
             flush_paragraph()
             break_ordered_list()
-            latex = strip[2:-2].strip()
             i += 1
             hidden = None
             if i < len(lines):
@@ -1202,7 +1213,7 @@ def convert_md_to_docx(
                     i += 1
             _add_block_equation(
                 doc,
-                latex,
+                single_latex,
                 base_dir=base_dir,
                 hidden=hidden,
                 image_max_w_in=image_max_w_in,
