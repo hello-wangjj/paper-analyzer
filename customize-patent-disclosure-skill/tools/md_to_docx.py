@@ -1346,6 +1346,22 @@ def convert_md_to_docx(
     return doc
 
 
+def _warn_bare_paren_latex(md_text: str) -> None:
+    """行内公式写成普通括号时给出机读提示 ``LATEX_DELIM:``（不阻断转换）。
+
+    ``(M_{\\mathrm{total}})`` 这类写法 Word 会当纯文本。``mermaid_render.py``
+    在定稿主路径上**硬拦截**（``DOCX: ok=0 reason=latex_delim``）；此处保证
+    **直接调用本脚本**（手动补转、``--math-render`` 重出）也能看到同一提示。
+    """
+    try:
+        from latex_delimiters import find_bare_paren_latex, format_hits_report
+    except ImportError:
+        return
+    hits = find_bare_paren_latex(md_text)
+    if hits:
+        print(format_hits_report(hits), file=sys.stderr)
+
+
 def main(argv: list[str] | None = None) -> int:
     ensure_utf8_stdio()
     p = argparse.ArgumentParser(description="Markdown → Word（标题样式映射）")
@@ -1398,6 +1414,8 @@ def main(argv: list[str] | None = None) -> int:
     except UnicodeDecodeError:
         md_text = in_path.read_text(encoding="utf-8", errors="replace")
         print("警告：输入文件含非 UTF-8 字节，已使用替换字符解码后继续转换。", file=sys.stderr)
+
+    _warn_bare_paren_latex(md_text)
 
     if args.math_render:
         md_text = _maybe_render_math_md(md_text, base)
