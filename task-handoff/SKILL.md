@@ -1,6 +1,6 @@
 ---
 name: task-handoff
-version: 1.1.0
+version: 1.1.1
 description: "在工程、项目、agent、工具与会话之间交接任务。当上下文即将耗尽、要换客户端或模型（Claude Code / Codex / WorkBuddy / ZCode / kilo / opencode / Gemini）、要把任务交给他人或另一个 agent、或任务需要跨仓库迁移时，生成并校验一份自足的单文件交接契约（`<工作根>/.handoff/<task>.md`），让接手方只读这一个文件就能继续，不必询问历史。触发词：交接、handoff、接手、续接、上下文快满了、换个 session / 工具 / 模型继续、转给同事、任务迁移、resume from here、pick up where I left off。"
 ---
 
@@ -33,9 +33,11 @@ description: "在工程、项目、agent、工具与会话之间交接任务。�
 
 ## 三个动作
 
-1. **建**：`python scripts/handoff.py new --root . --task <slug> --title "<标题>" --boundary <类型> --to "<接手方>"`。同一 `task` 已存在时脚本拒绝重建：重复交接直接编辑现有文件。
+`<skill目录>` 指本 skill 的安装目录（如 `~/.zcode/skills/task-handoff`）；命令在目标仓库内执行，须写 skill 的完整路径，`scripts/handoff.py` 不是目标仓库里的文件。
+
+1. **建**：`python <skill目录>/scripts/handoff.py new --root . --task <slug> --title "<标题>" --boundary <类型> --to "<接手方>"`。同一 `task` 已存在时脚本拒绝重建：重复交接直接编辑现有文件。
 2. **写**：按 §1–§9 填满，遵守下面四条硬规则。删除模板里所有以 `>` 开头的说明行。未提交的产物必须内联，不能只给路径。
-3. **校验**：`python scripts/handoff.py check`，错误清零再交付。它只做机械判定：结构、占位符、`sha:path` 在本机仓库中是否真的存在、`[x]` 是否有可读证据；不判断内容质量，也不能证明跨机器可达。接手方用 `list` 找记录。
+3. **校验**：`python <skill目录>/scripts/handoff.py check`，错误清零再交付。它只做机械判定：结构、占位符、`sha:path` 在本机仓库中是否真的存在、`[x]` 是否有可读证据；不判断内容质量，也不能证明跨机器可达。接手方用 `list` 找记录。
 
 ## 契约九节
 
@@ -84,10 +86,11 @@ description: "在工程、项目、agent、工具与会话之间交接任务。�
 ## 命令
 
 ```bash
-python scripts/handoff.py new --root . --task kf-tuning --title "KF 参数整定" \
+# <skill目录> = skill 安装目录（如 ~/.zcode/skills/task-handoff）
+python <skill目录>/scripts/handoff.py new --root . --task kf-tuning --title "KF 参数整定" \
     --boundary tool-switch --to "Codex/gpt-5"
-python scripts/handoff.py check .handoff      # 也可传单个 .md
-python scripts/handoff.py list               # 不给参数时向上找 .handoff
+python <skill目录>/scripts/handoff.py check .handoff      # 也可传单个 .md
+python <skill目录>/scripts/handoff.py list                # 不给参数时向上找 .handoff
 ```
 
 退出码：`0` 无错误（可能有 WARN）、`1` 有 ERROR、`2` 用法或 IO 错误。WARN 不影响退出码。

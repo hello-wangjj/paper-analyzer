@@ -16,7 +16,7 @@ head: {{head}}
 
 > 本文件是唯一交接入口，接手方只读它即可开始。
 > 填写规则：删除所有以 > 开头的说明行；磁盘上有的产物给路径+sha，磁盘上没有的整段粘贴进围栏代码块。
-> 交付前运行：python scripts/handoff.py check
+> 交付前运行：python <skill目录>/scripts/handoff.py check
 
 ## 1. 目标与验收
 

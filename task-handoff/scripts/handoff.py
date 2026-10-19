@@ -46,7 +46,7 @@ SECTIONS = (
 SKILL_ROOT = Path(__file__).resolve().parent.parent
 TEMPLATE = SKILL_ROOT / "assets" / "template.md"
 
-# 省略式引用与未完成标记：出现即视为交接未写完
+# 省略式引用与未完成标记：出现即视为交接未写完（只查围栏外，围栏内是产物原文）
 SIMPLE_BAD_MARKERS = (
     (re.compile(r"见上文|同上|如前所述|如上所述|see above|as above|as discussed above", re.I), "省略式引用"),
     (re.compile(r"\bTBD\b|\bTODO\b|待补充|待填写"), "未完成标记"),
@@ -69,6 +69,8 @@ CHAIN_RE = re.compile(
     r"^[-*]\s+(\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2})\s*·\s*(.+?)\s*→\s*(.+?)\s*·\s*([a-z-]+)\s*·\s*(.+)$"
 )
 MSYS_PATH_RE = re.compile(r"^/[A-Za-z]/")
+# 与 assets/template.md 内联围栏的占位符措辞对应，改模板时同步改这里
+INLINE_TEMPLATE_HINT = "磁盘上不存在的内容"
 
 
 # ---------------------------------------------------------------- 基础解析
@@ -229,13 +231,17 @@ def pad(text: str, width: int) -> str:
     return text + " " * max(0, width - block_width(text))
 
 
-def resolve_root(meta: dict, record: Path) -> Path:
+def resolve_root(meta: dict, record: Path) -> tuple[Path, bool]:
+    """返回 (工作根, 声明路径是否本机失效)。记录随仓库迁到别的机器后，写死的
+    project_root 不存在；此时回退到 .handoff 的上级继续校验，而不是整份报错。"""
     declared = ((meta or {}).get("project_root") or "").strip()
     if declared and declared != "-":
         path = Path(declared)
         if path.is_absolute():
-            return path
-    return record.parent.parent.resolve()
+            if path.exists():
+                return path, False
+            return record.parent.parent.resolve(), True
+    return record.parent.parent.resolve(), False
 
 
 # ---------------------------------------------------------------- git 辅助
@@ -281,6 +287,8 @@ def git_has_path(root: Path, sha: str, relpath: str) -> bool:
 def git_line_count(root: Path, sha: str, relpath: str):
     proc = git_run(root, "show", f"{sha}:{relpath}")
     if proc is None or proc.returncode != 0:
+        return None
+    if "\x00" in proc.stdout:  # 二进制内容按行校验没有意义
         return None
     return len(proc.stdout.splitlines())
 
@@ -339,7 +347,9 @@ def check_artifact(item: str, root: Path, errors: list[str], warnings: list[str]
         return
 
     total = git_line_count(root, sha, relpath)
-    if total is not None:
+    if total is None:
+        warnings.append(f"§3 无法按行校验（二进制或读取失败），行号未检查：{raw}")
+    else:
         bounds = rng.split("-")
         start = int(bounds[0])
         end = int(bounds[-1])
@@ -384,9 +394,11 @@ def validate(record: Path):
         elif not Path(declared_root).is_absolute():
             errors.append(f"project_root 必须是绝对路径：{declared_root!r}")
 
-    root = resolve_root(meta, record)
-    if not root.exists():
-        warnings.append(f"project_root 不存在（记录可能已迁走）：{root}")
+    root, stale_root = resolve_root(meta, record)
+    if stale_root:
+        warnings.append(
+            f"project_root 在本机不存在，已回退到记录所在目录：{meta.get('project_root')} → {root.as_posix()}"
+        )
 
     head = (meta.get("head") or "").strip()
     if head and head != "-":
@@ -433,7 +445,8 @@ def validate(record: Path):
         if not lines:
             errors.append(f"§{title} 为空（说明行不计入内容）")
             continue
-        joined = "\n".join(lines)
+        # 坏标记只查围栏外：围栏内是 verbatim 产物原文，TODO/<vector>/「见上文」是内容不是缺陷
+        joined = "\n".join(outside_fences(lines))
         for hit_text, label in find_bad_markers(joined):
             errors.append(f"§{title} 含{label}：{hit_text!r}")
         if len("".join(lines).strip()) < 12:
@@ -461,6 +474,21 @@ def validate(record: Path):
         check_artifact(item, root, errors, warnings)
     if has_inline and not any(FENCE_RE.match(line) for line in artifact_lines):
         errors.append("§3 有「内联」条目但缺围栏代码块（内容必须整段粘贴）")
+
+    # 围栏内容不参与坏标记扫描，这里单独兜住没真贴内容的内联条目
+    fenced: list[str] = []
+    state = None
+    for line in artifact_lines:
+        if FENCE_RE.match(line):
+            state = fence_state(state, line)
+            continue
+        if state is not None:
+            fenced.append(line)
+    fenced_text = "\n".join(fenced)
+    if INLINE_TEMPLATE_HINT in fenced_text:
+        errors.append("§3 内联围栏仍是模板占位符（整段粘贴实际内容，或删掉该条目与围栏）")
+    elif has_inline and not fenced_text.strip():
+        errors.append("§3 有「内联」条目但围栏内容为空")
 
     # §9：交接链至少一条，且每行格式可审计
     chain_lines = [line for line in bodies.get("交接链", []) if TOP_BULLET_RE.match(line)]
@@ -642,6 +670,12 @@ def cmd_list(args) -> int:
 
 
 def main(argv=None) -> int:
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            # GBK 管道下遇不可编码字符替换为 ? ，不让校验结果本身打不出来
+            stream.reconfigure(errors="replace")
+        except (AttributeError, OSError):
+            pass
     parser = argparse.ArgumentParser(prog="handoff.py", description="task-handoff 契约脚手架与校验器")
     sub = parser.add_subparsers(dest="command", required=True)
 
