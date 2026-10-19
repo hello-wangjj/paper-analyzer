@@ -45,6 +45,23 @@ class MdToDocxListNumberingTests(unittest.TestCase):
         self.assertEqual(len(numbered), 2)
         self.assertEqual(_paragraph_num_id(numbered[0]), _paragraph_num_id(numbered[1]))
 
+    def test_inline_math_item_keeps_same_instance(self) -> None:
+        """含行内公式的列表项不得被当作普通段落而打断列表。"""
+        md = "1. 甲\n2. 乙 \\(\\rho\\)\n3. 丙\n"
+        doc = convert_md_to_docx(md, base_dir=None, prefer_omml=False)
+        numbered = [p for p in doc.paragraphs if _paragraph_num_id(p) is not None]
+        self.assertEqual(len(numbered), 3)
+        ids = {_paragraph_num_id(p) for p in numbered}
+        self.assertEqual(len(ids), 1)
+
+    def test_inline_math_first_item_keeps_numbering(self) -> None:
+        """首项含行内公式时，后续项仍须延续同一列表实例。"""
+        md = "1. 甲 \\(x\\)\n2. 乙\n"
+        doc = convert_md_to_docx(md, base_dir=None, prefer_omml=False)
+        numbered = [p for p in doc.paragraphs if _paragraph_num_id(p) is not None]
+        self.assertEqual(len(numbered), 2)
+        self.assertEqual(_paragraph_num_id(numbered[0]), _paragraph_num_id(numbered[1]))
+
 
 if __name__ == "__main__":
     unittest.main()

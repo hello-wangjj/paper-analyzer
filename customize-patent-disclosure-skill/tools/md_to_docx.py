@@ -1236,6 +1236,36 @@ def convert_md_to_docx(
             i += 1
             continue
 
+        # 列表优先于行内公式/图片分支：列表项中的行内公式与图片
+        # 由 _add_list_item 内部处理，避免字面编号打断有序列表。
+        um = re.match(r"^(\s*)[-*+]\s+(.+)$", line)
+        if um:
+            flush_paragraph()
+            break_ordered_list()
+            _add_list_item(
+                doc,
+                um.group(2).strip(),
+                ordered=False,
+                base_dir=base_dir,
+                image_max_h_in=image_max_h_in,
+            )
+            i += 1
+            continue
+
+        om = re.match(r"^(\s*)\d+\.\s+(.+)$", line)
+        if om:
+            flush_paragraph()
+            p = _add_list_item(
+                doc,
+                om.group(2).strip(),
+                ordered=True,
+                base_dir=base_dir,
+                image_max_h_in=image_max_h_in,
+            )
+            bind_ordered_paragraph(p)
+            i += 1
+            continue
+
         # 图片行或含行内公式/注释的段落
         if _line_has_embeddable_images(line):
             flush_paragraph()
@@ -1307,36 +1337,6 @@ def convert_md_to_docx(
                     table_rows.append(row)
                 i += 1
             _add_table(doc, table_rows, base_dir)
-            continue
-
-        # 无序列表
-        um = re.match(r"^(\s*)[-*+]\s+(.+)$", line)
-        if um:
-            flush_paragraph()
-            break_ordered_list()
-            _add_list_item(
-                doc,
-                um.group(2).strip(),
-                ordered=False,
-                base_dir=base_dir,
-                image_max_h_in=image_max_h_in,
-            )
-            i += 1
-            continue
-
-        # 有序列表
-        om = re.match(r"^(\s*)\d+\.\s+(.+)$", line)
-        if om:
-            flush_paragraph()
-            p = _add_list_item(
-                doc,
-                om.group(2).strip(),
-                ordered=True,
-                base_dir=base_dir,
-                image_max_h_in=image_max_h_in,
-            )
-            bind_ordered_paragraph(p)
-            i += 1
             continue
 
         para_buf.append(line)
